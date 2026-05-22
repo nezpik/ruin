@@ -7,7 +7,8 @@ from typing import Any
 
 import pytest
 
-from ruin.config import load_config
+from ruin.config import load_config, load_ruin_config
+from ruin.config_models import RuinConfig
 
 
 @pytest.fixture(scope="session")
@@ -18,13 +19,19 @@ def golden_config_path() -> Path:
 
 @pytest.fixture(scope="session")
 def golden_config(golden_config_path: Path) -> dict[str, Any]:
-    """Parsed golden config dict (v0.1 compatible)."""
+    """Parsed golden config dict (v0.1 compatible legacy)."""
     return load_config(golden_config_path)
+
+
+@pytest.fixture(scope="session")
+def golden_ruin_config(golden_config_path: Path) -> RuinConfig:
+    """Fully validated Pydantic RuinConfig (v0.2 recommended)."""
+    return load_ruin_config(golden_config_path)
 
 
 @pytest.fixture
 def small_config() -> dict[str, Any]:
-    """Minimal config for fast unit tests."""
+    """Minimal but complete valid config for fast unit tests (8x8 grid)."""
     return {
         "simulation": {
             "name": "tiny_test",
@@ -72,7 +79,10 @@ def small_config() -> dict[str, Any]:
                 "stressed_chaos_pressure": 0.35,
                 "disrupted_chaos_pressure": 0.55,
                 "chaotic_chaos_pressure": 0.75,
+                "recovering_decay_ratio": 0.30,
             },
+            "order_pressure_weight": 1.0,
+            "chaos_pressure_weight": 1.0,
         },
         "disruption_field": {
             "enabled": True,
@@ -83,11 +93,27 @@ def small_config() -> dict[str, Any]:
             "propagation_decay": 0.5,
             "temporal_decay": 0.15,
             "recovery_rate": 0.1,
+            "qdot_exposure_multiplier": 1.0,
         },
         "ruin": {
             "initial_buffer": 30,
             "barrier": 0,
             "sla_threshold": 0.25,
             "recovery_rate": 0.0,
+            "rule": "surplus_or_sla",
+        },
+        "risk": {
+            "monte_carlo_paths": 10,
+            "confidence_level": 0.95,
+        },
+        "visualization": {
+            "enabled": False,
+            "frames": 10,
         },
     }
+
+
+@pytest.fixture
+def small_ruin_config(small_config: dict[str, Any]) -> RuinConfig:
+    """Typed Pydantic version of small_config."""
+    return RuinConfig.model_validate(small_config)

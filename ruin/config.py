@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from .config_models import RuinConfig, RuinConfigRoot  # v0.2 Pydantic models
+
 
 def parse_scalar(value: str) -> Any:
     value = value.strip()
@@ -71,3 +73,13 @@ def _next_non_empty_is_list(lines: list[str], current: str) -> bool:
             continue
         return line.strip().startswith("- ")
     return False
+
+
+def load_ruin_config(path: str | Path) -> RuinConfigRoot:
+    """Load YAML config via legacy parser then validate with Pydantic (v0.2).
+
+    This provides full strict validation (extra='forbid') while keeping
+    100% backward compatibility with all v0.1 config files.
+    """
+    raw = load_config(path)
+    return RuinConfigRoot.model_validate(raw)
