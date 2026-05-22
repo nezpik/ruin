@@ -7,7 +7,7 @@ from pathlib import Path
 from ruin.config import load_config
 from ruin.risk.ruin_probability import run_monte_carlo
 from ruin.simulation.agent_based import run_trajectory
-from ruin.viz.square import save_text_frames
+from ruin.viz.square import save_text_frames, save_field_gif
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -20,7 +20,7 @@ def build_parser() -> argparse.ArgumentParser:
     simulate.add_argument("--max-steps", type=int, default=None)
     simulate.add_argument("--output", default="ruin_frames.txt")
     simulate.add_argument("--json", action="store_true")
-    simulate.add_argument("--visualize", action="store_true")
+    simulate.add_argument("--visualize", action="store_true", help="Also generate a GIF animation of the field + Q-dots")
 
     risk = subparsers.add_parser("risk", help="Run Monte Carlo ruin-risk estimation")
     risk.add_argument("--config", required=True)
@@ -39,6 +39,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "simulate":
         result = run_trajectory(config, max_steps=args.max_steps)
         save_text_frames(result, Path(args.output), limit=args.frames)
+
+        if args.visualize:
+            gif_path = Path(args.output).with_suffix(".gif")
+            save_field_gif(result, config, output=gif_path, fps=8, max_frames=120)
+            print(f"Animation written to {gif_path}")
+
         summary = {
             "ruined": result["ruined"],
             "ruin_time": result["ruin_time"],
