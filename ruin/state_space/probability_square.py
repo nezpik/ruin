@@ -3,8 +3,18 @@ from __future__ import annotations
 from random import Random
 from typing import Any
 
+import numpy as np
+
+from ruin.core.processes import make_rng, sample_shock_arrivals
 from ruin.core.qdot import QDot, QDotType
-from ruin.metrics.pressure import DState, choose_d_state, global_chaos_pressure, global_order_pressure, local_chaos_pressure, local_order_pressure
+from ruin.metrics.pressure import (
+    DState,
+    choose_d_state,
+    global_chaos_pressure,
+    global_order_pressure,
+    local_chaos_pressure,
+    local_order_pressure,
+)
 from ruin.state_space.disruption_field import DisruptionField
 
 
@@ -13,9 +23,22 @@ class ProbabilitySquare:
         simulation = config["simulation"]
         square = config["probability_square"]
         field_config = config["disruption_field"]
+
         self.width = int(simulation["grid_width"])
         self.height = int(simulation["grid_height"])
         self.rng = rng
+
+        # v0.2: independent NumPy RNG for vectorized sampling
+        seed = 42
+        try:
+            if hasattr(rng, "getstate"):
+                state = rng.getstate()
+                if isinstance(state, tuple) and len(state) > 1:
+                    seed = abs(hash(str(state[1]))) % (2**31)
+        except Exception:
+            seed = 42
+        self.np_rng = make_rng(seed)
+
         self.time = 0
         self.d_state = DState(str(square.get("initial_d_state", "stable")).upper())
         self.previous_chaos_pressure = 0.0
@@ -25,6 +48,7 @@ class ProbabilitySquare:
         self.thresholds = square.get("d_state_thresholds", {})
         self.qdot_feedback_weight = float(square.get("qdot_feedback_weight", 0.5))
         self.max_capacity = self.width * self.height
+
         self.field = DisruptionField(
             self.width,
             self.height,
@@ -34,6 +58,7 @@ class ProbabilitySquare:
             float(field_config.get("temporal_decay", 0.12)),
             float(field_config.get("recovery_rate", 0.08)),
             rng,
+            self.np_rng,
         )
         self.qdots = self._spawn_qdots(config)
         self.initial_qdots = len(self.qdots)
@@ -68,11 +93,17 @@ class ProbabilitySquare:
         self.time += 1
         processes = config["processes"]
         field_config = config["disruption_field"]
-        if bool(field_config.get("enabled", True)) and self.rng.random() < float(field_config.get("shock_arrival_rate", 0.05)):
-            self.field.random_shock(float(field_config.get("mean_initial_intensity", 2.0)))
 
-        jump_probability = float(processes.get("jump_intensity", 0.08))
-        if self.rng.random() < jump_probability:
+        # === v0.2 Vectorized shock arrivals (the main integration point) ===
+        if bool(field_config.get("enabled", True)):
+            shock_rate = float(field_config.get("shock_arrival_rate", 0.05))
+            shock_mask = sample_shock_arrivals(1, rate=shock_rate, dt=1.0, rng=self.np_rng)
+            if shock_mask[0]:
+                self.field.random_shock(float(field_config.get("mean_initial_intensity", 2.0)))
+
+        jump_intensity = float(processes.get("jump_intensity", 0.08))
+        jump_mask = sample_shock_arrivals(1, rate=jump_intensity, dt=1.0, rng=self.np_rng)
+        if jump_mask[0]:
             self.field.random_shock(float(processes.get("jump_mean_size", 3.0)))
 
         self.field.step()
@@ -84,7 +115,9 @@ class ProbabilitySquare:
 
         for qdot in self.qdots:
             active_by_cell[qdot.position] = active_by_cell.get(qdot.position, 0) + int(not qdot.is_ruined)
-            qdot.field_exposure = self.field.exposure_at(qdot.x, qdot.y) * float(field_config.get("qdot_exposure_multiplier", 1.0))
+            qdot.field_exposure = self.field.exposure_at(qdot.x, qdot.y) * float(
+                field_config.get("qdot_exposure_multiplier", 1.0)
+            )
             qdot.d_state_exposure = self.d_state.value
             before = qdot.position
             penalty += qdot.step(
@@ -108,13 +141,18 @@ class ProbabilitySquare:
                 active = active_by_cell.get((x, y), 0)
                 failed = failed_by_cell.get((x, y), 0)
                 failed_ratio = failed / max(active + failed, 1)
-                local_pressures.append(local_chaos_pressure(self.field.exposure_at(x, y), 0.0, failed_ratio))
+                local_pressures.append(
+                    local_chaos_pressure(self.field.exposure_at(x, y), 0.0, failed_ratio)
+                )
 
         late_count = sum(1 for qdot in self.qdots if qdot.late)
         active_count = sum(1 for qdot in self.qdots if not qdot.is_ruined)
         late_ratio = late_count / max(active_count, 1)
+
         self.global_chaos_pressure = global_chaos_pressure(local_pressures, late_ratio)
-        self.global_order_pressure = global_order_pressure(active_count, late_count, self.max_capacity, self.initial_qdots)
+        self.global_order_pressure = global_order_pressure(
+            active_count, late_count, self.max_capacity, self.initial_qdots
+        )
 
         for qdot in self.qdots:
             active = active_by_cell.get(qdot.position, 0)
