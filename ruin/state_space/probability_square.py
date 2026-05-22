@@ -5,7 +5,7 @@ from typing import Any
 
 import numpy as np
 
-from ruin.core.processes import make_rng, sample_shock_arrivals
+from ruin.core.processes import batch_qdot_travel_step, make_rng, sample_shock_arrivals
 from ruin.core.qdot import QDot, QDotType
 from ruin.metrics.pressure import (
     DState,
@@ -141,26 +141,47 @@ class ProbabilitySquare:
         moving_by_cell: dict[tuple[int, int], int] = {}
         failed_by_cell: dict[tuple[int, int], int] = {}
 
-        for qdot in self.qdots:
-            if qdot.is_ruined:
-                continue
-            cx, cy = qdot.position
-            active_by_cell[(cx, cy)] = active_by_cell.get((cx, cy), 0) + 1
+        # v0.2: collect non-ruined QDots for vectorized batch step
+        active_qdots = [q for q in self.qdots if not q.is_ruined]
+        n_active = len(active_qdots)
 
-            qdot.field_exposure = self.field.exposure_at(cx, cy)
+        if n_active > 0:
+            xs = np.array([q.x for q in active_qdots], dtype=int)
+            ys = np.array([q.y for q in active_qdots], dtype=int)
+            tws = np.array([q.time_window for q in active_qdots], dtype=float)
+            exposures = np.array([self.field.exposure_at(q.x, q.y) for q in active_qdots], dtype=float)
+            drift_m = np.array([q.drift_multiplier for q in active_qdots], dtype=float)
+            vol_m = np.array([q.volatility_multiplier for q in active_qdots], dtype=float)
 
-            before = qdot.position
-            penalty += qdot.step(
-                self.width,
-                self.height,
-                float(processes.get("travel_drift", 1.2)),
-                float(processes.get("travel_volatility", 0.4)),
-                self.rng,
+            base_drift = float(processes.get("travel_drift", 1.2))
+            base_vol = float(processes.get("travel_volatility", 0.4))
+
+            new_xs, new_ys, new_tws, raw_penalties, late_mask = batch_qdot_travel_step(
+                xs, ys, tws, exposures, drift_m, vol_m,
+                base_drift, base_vol, self.width, self.height, self.np_rng
             )
-            if qdot.position != before:
-                moving_by_cell[qdot.position] = moving_by_cell.get(qdot.position, 0) + 1
-            if qdot.is_ruined:
-                failed_by_cell[qdot.position] = failed_by_cell.get(qdot.position, 0) + 1
+
+            # Write back + accumulate scaled penalties + track movement/ruin
+            for i, qdot in enumerate(active_qdots):
+                before = (qdot.x, qdot.y)
+                qdot.x = int(new_xs[i])
+                qdot.y = int(new_ys[i])
+                qdot.time_window = float(new_tws[i])
+                qdot.field_exposure = exposures[i]
+
+                if (qdot.x, qdot.y) != before:
+                    moving_by_cell[(qdot.x, qdot.y)] = moving_by_cell.get((qdot.x, qdot.y), 0) + 1
+
+                if late_mask[i] and not qdot.late:
+                    qdot.late = True
+                    qdot.is_ruined = True
+                    scaled_penalty = raw_penalties[i] * qdot.delay_penalty
+                    penalty += scaled_penalty
+                    failed_by_cell[(qdot.x, qdot.y)] = failed_by_cell.get((qdot.x, qdot.y), 0) + 1
+                elif late_mask[i]:
+                    qdot.late = True
+                    qdot.is_ruined = True
+                    failed_by_cell[(qdot.x, qdot.y)] = failed_by_cell.get((qdot.x, qdot.y), 0) + 1
 
         for (x, y), failed in failed_by_cell.items():
             self.field.inject(x, y, failed * self.qdot_feedback_weight)

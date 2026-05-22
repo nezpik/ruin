@@ -113,6 +113,72 @@ def sample_shock_arrivals(
 
 
 # =============================================================================
+# Vectorized QDot batch movement (new in this step)
+# =============================================================================
+
+def batch_qdot_travel_step(
+    x: np.ndarray,
+    y: np.ndarray,
+    time_windows: np.ndarray,
+    field_exposures: np.ndarray,
+    drift_mults: np.ndarray,
+    vol_mults: np.ndarray,
+    base_drift: float,
+    base_vol: float,
+    width: int,
+    height: int,
+    rng: np.random.Generator,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Vectorized travel step for many QDots.
+
+    Mirrors the scalar QDot.step logic as closely as possible:
+    - Field drag on drift
+    - Gaussian + small random y component
+    - Boundary clamping
+    - Time window decay with exposure penalty
+    - Late → ruined + penalty computation
+
+    Returns:
+        new_x, new_y, new_time_windows, penalties, newly_ruined (bool mask)
+    """
+    n = len(x)
+    if n == 0:
+        return x, y, time_windows, np.zeros(0), np.zeros(0, dtype=bool)
+
+    # Field drag
+    drag = np.maximum(0.05, 1.0 - np.minimum(field_exposures, 5.0) * 0.08)
+
+    effective_drift = base_drift * drift_mults * drag
+    vol = base_vol * vol_mults
+
+    # Vectorized noise
+    z = rng.standard_normal(n)
+    dx = np.round(effective_drift + vol * z).astype(int)
+
+    # Small random y component (same distribution as scalar)
+    dy = rng.choice([-1, 0, 1], size=n) * np.maximum(0.0, vol)
+
+    new_x = np.clip(x + dx, 0, width - 1)
+    new_y = np.clip(y + dy.astype(int), 0, height - 1)
+
+    # Time window decay
+    slack_loss = 1.0 + np.maximum(0.0, field_exposures) * 0.25
+    new_time = time_windows - slack_loss
+
+    # Late / ruined logic
+    late_mask = new_time <= 0
+    penalties = np.zeros(n, dtype=float)
+    newly_ruined = late_mask & ~np.zeros(n, dtype=bool)  # placeholder; caller will handle
+
+    # Penalty only on newly ruined this step
+    # We compute penalty using the current (pre-step) exposure for simplicity
+    penalties[late_mask] = (1.0 + field_exposures[late_mask])  # scaled later by delay_penalty in caller
+
+    return new_x, new_y, new_time, penalties, late_mask
+
+
+# =============================================================================
 # Legacy scalar classes (kept for compatibility during transition)
 # =============================================================================
 
