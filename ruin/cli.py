@@ -20,7 +20,7 @@ def build_parser() -> argparse.ArgumentParser:
     simulate.add_argument("--max-steps", type=int, default=None)
     simulate.add_argument("--output", default="ruin_frames.txt")
     simulate.add_argument("--json", action="store_true")
-    simulate.add_argument("--visualize", action="store_true", help="Also generate a GIF animation of the field + Q-dots")
+    simulate.add_argument("--visualize", action="store_true", help="Generate animated GIF of the real disruption field + Q-dots")
 
     risk = subparsers.add_parser("risk", help="Run Monte Carlo ruin-risk estimation")
     risk.add_argument("--config", required=True)
@@ -37,7 +37,9 @@ def main(argv: list[str] | None = None) -> int:
     config = load_config(args.config)
 
     if args.command == "simulate":
-        result = run_trajectory(config, max_steps=args.max_steps)
+        store_field = bool(args.visualize)
+        result = run_trajectory(config, max_steps=args.max_steps, store_field_snapshots=store_field)
+
         save_text_frames(result, Path(args.output), limit=args.frames)
 
         if args.visualize:

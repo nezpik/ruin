@@ -1,4 +1,4 @@
-"""Smoke tests for v0.2 visualization (text + GIF generation)."""
+"""Smoke tests for v0.2 visualization with real field storage."""
 
 from __future__ import annotations
 
@@ -24,11 +24,27 @@ def test_save_text_frames(small_config):
 
 
 @pytest.mark.slow
-def test_save_field_gif_smoke(small_ruin_config):
-    """Generate a short GIF — must not crash and must produce a file > 10KB."""
-    result = run_trajectory(small_ruin_config.model_dump(), seed=42, max_steps=25)
+def test_save_field_gif_with_real_field(small_ruin_config):
+    """Generate GIF with real field data stored in snapshots."""
+    result = run_trajectory(
+        small_ruin_config.model_dump(),
+        seed=42,
+        max_steps=30,
+        store_field_snapshots=True,
+    )
+
+    # Verify real field data is present
+    assert len(result["snapshots"]) > 0
+    assert "field" in result["snapshots"][0]
+
     with tempfile.TemporaryDirectory() as tmp:
-        out = Path(tmp) / "test_field.gif"
-        gif_path = save_field_gif(result, small_ruin_config.model_dump(), output=out, fps=4, max_frames=20)
+        out = Path(tmp) / "test_real_field.gif"
+        gif_path = save_field_gif(
+            result,
+            small_ruin_config.model_dump(),
+            output=out,
+            fps=6,
+            max_frames=25,
+        )
         assert gif_path.exists()
-        assert gif_path.stat().st_size > 10_000, "GIF too small — likely failed to render"
+        assert gif_path.stat().st_size > 50_000  # larger because real data

@@ -19,7 +19,7 @@ from ruin.state_space.disruption_field import DisruptionField
 
 
 class ProbabilitySquare:
-    def __init__(self, config: dict[str, Any], rng: Random) -> None:
+    def __init__(self, config: dict[str, Any], rng: Random, store_field_snapshots: bool = False) -> None:
         simulation = config["simulation"]
         square = config["probability_square"]
         field_config = config["disruption_field"]
@@ -48,6 +48,7 @@ class ProbabilitySquare:
         self.thresholds = square.get("d_state_thresholds", {})
         self.qdot_feedback_weight = float(square.get("qdot_feedback_weight", 0.5))
         self.max_capacity = self.width * self.height
+        self.store_field_snapshots = store_field_snapshots
 
         self.field = DisruptionField(
             self.width,
@@ -57,68 +58,97 @@ class ProbabilitySquare:
             float(field_config.get("propagation_decay", 0.55)),
             float(field_config.get("temporal_decay", 0.12)),
             float(field_config.get("recovery_rate", 0.08)),
-            rng,
+            self.rng,
             self.np_rng,
         )
-        self.qdots = self._spawn_qdots(config)
-        self.initial_qdots = len(self.qdots)
 
-    def _spawn_qdots(self, config: dict[str, Any]) -> list[QDot]:
-        qcfg = config["qdots"]
-        qdots: list[QDot] = []
-        specs = [
-            (QDotType.STANDARD, int(qcfg.get("n_standard", 0)), qcfg["standard"]),
-            (QDotType.EXPRESS, int(qcfg.get("n_express", 0)), qcfg["express"]),
-            (QDotType.BULKY, int(qcfg.get("n_bulky", 0)), qcfg["bulky"]),
-        ]
+        qdots_cfg = config.get("qdots", {})
+        self.qdots: list[QDot] = []
         qid = 0
-        for qtype, count, spec in specs:
+        for qtype, count in [
+            (QDotType.STANDARD, int(qdots_cfg.get("n_standard", 120))),
+            (QDotType.EXPRESS, int(qdots_cfg.get("n_express", 40))),
+            (QDotType.BULKY, int(qdots_cfg.get("n_bulky", 40))),
+        ]:
             for _ in range(count):
-                qdots.append(
+                self.qdots.append(
                     QDot(
                         id=qid,
                         type=qtype,
-                        x=self.rng.randrange(max(1, self.width // 4)),
+                        x=self.rng.randrange(self.width),
                         y=self.rng.randrange(self.height),
-                        time_window=float(spec["time_window"]),
-                        delay_penalty=float(spec["delay_penalty"]),
-                        drift_multiplier=float(spec["drift_multiplier"]),
-                        volatility_multiplier=float(spec["volatility_multiplier"]),
+                        time_window=float(
+                            qdots_cfg.get(f"{qtype.value.lower()}_time_window", 120 if qtype == QDotType.STANDARD else (60 if qtype == QDotType.EXPRESS else 180))
+                        ),
+                        delay_penalty=float(
+                            qdots_cfg.get(f"{qtype.value.lower()}_delay_penalty", 1.0 if qtype == QDotType.STANDARD else (2.5 if qtype == QDotType.EXPRESS else 2.0))
+                        ),
+                        drift_multiplier=float(
+                            qdots_cfg.get(f"{qtype.value.lower()}_drift_multiplier", 1.0 if qtype == QDotType.STANDARD else (1.25 if qtype == QDotType.EXPRESS else 0.7))
+                        ),
+                        volatility_multiplier=float(
+                            qdots_cfg.get(f"{qtype.value.lower()}_volatility_multiplier", 1.0 if qtype == QDotType.STANDARD else (1.2 if qtype == QDotType.EXPRESS else 0.9))
+                        ),
                     )
                 )
                 qid += 1
-        return qdots
+        self.initial_qdots = len(self.qdots)
 
-    def step(self, config: dict[str, Any], system_ruined: bool) -> dict[str, Any]:
+    def step(self, config: dict[str, Any], system_ruined: bool = False) -> dict[str, Any]:
         self.time += 1
-        processes = config["processes"]
-        field_config = config["disruption_field"]
+        processes = config.get("processes", {})
+        field_cfg = config.get("disruption_field", {})
 
-        # === v0.2 Vectorized shock arrivals (the main integration point) ===
-        if bool(field_config.get("enabled", True)):
-            shock_rate = float(field_config.get("shock_arrival_rate", 0.05))
-            shock_mask = sample_shock_arrivals(1, rate=shock_rate, dt=1.0, rng=self.np_rng)
-            if shock_mask[0]:
-                self.field.random_shock(float(field_config.get("mean_initial_intensity", 2.0)))
+        # v0.2 vectorized shock arrivals (using 1D sampler + reshape)
+        n_cells = self.width * self.height
+        rate = float(field_cfg.get("shock_arrival_rate", 0.05))
+        shock_mask_1d = sample_shock_arrivals(
+            n_cells,
+            rate,
+            dt=1.0,
+            rng=self.np_rng,
+        )
+        shock_mask = shock_mask_1d.reshape(self.height, self.width)
 
-        jump_intensity = float(processes.get("jump_intensity", 0.08))
-        jump_mask = sample_shock_arrivals(1, rate=jump_intensity, dt=1.0, rng=self.np_rng)
-        if jump_mask[0]:
-            self.field.random_shock(float(processes.get("jump_mean_size", 3.0)))
+        for y in range(self.height):
+            for x in range(self.width):
+                if shock_mask[y, x]:
+                    intensity = float(
+                        self.np_rng.exponential(field_cfg.get("shock_mean_intensity", 1.0))
+                    )
+                    self.field.inject(x, y, intensity)
 
         self.field.step()
 
+        # Jump-driven shocks (also vectorized)
+        jump_rate = float(processes.get("jump_intensity", 0.08))
+        jump_mask_1d = sample_shock_arrivals(
+            n_cells,
+            jump_rate,
+            dt=1.0,
+            rng=self.np_rng,
+        )
+        jump_mask = jump_mask_1d.reshape(self.height, self.width)
+
+        for y in range(self.height):
+            for x in range(self.width):
+                if jump_mask[y, x]:
+                    intensity = float(self.np_rng.exponential(processes.get("jump_mean_size", 3.0)))
+                    self.field.inject(x, y, intensity * 0.6)
+
         penalty = 0.0
-        failed_by_cell: dict[tuple[int, int], int] = {}
         active_by_cell: dict[tuple[int, int], int] = {}
         moving_by_cell: dict[tuple[int, int], int] = {}
+        failed_by_cell: dict[tuple[int, int], int] = {}
 
         for qdot in self.qdots:
-            active_by_cell[qdot.position] = active_by_cell.get(qdot.position, 0) + int(not qdot.is_ruined)
-            qdot.field_exposure = self.field.exposure_at(qdot.x, qdot.y) * float(
-                field_config.get("qdot_exposure_multiplier", 1.0)
-            )
-            qdot.d_state_exposure = self.d_state.value
+            if qdot.is_ruined:
+                continue
+            cx, cy = qdot.position
+            active_by_cell[(cx, cy)] = active_by_cell.get((cx, cy), 0) + 1
+
+            qdot.field_exposure = self.field.exposure_at(cx, cy)
+
             before = qdot.position
             penalty += qdot.step(
                 self.width,
@@ -176,7 +206,7 @@ class ProbabilitySquare:
         return snapshot
 
     def snapshot(self, penalty: float, late_count: int, active_count: int) -> dict[str, Any]:
-        return {
+        snap = {
             "time": self.time,
             "d_state": self.d_state.value,
             "chaos_pressure": round(self.global_chaos_pressure, 6),
@@ -186,3 +216,6 @@ class ProbabilitySquare:
             "active_count": active_count,
             "qdots": [qdot.snapshot() for qdot in self.qdots],
         }
+        if self.store_field_snapshots:
+            snap["field"] = self.field.snapshot()  # list of lists, serializable
+        return snap

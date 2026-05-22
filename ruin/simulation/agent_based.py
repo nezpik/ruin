@@ -7,15 +7,20 @@ from ruin.core.network import NetworkSurplus
 from ruin.state_space.probability_square import ProbabilitySquare
 
 
-def run_trajectory(config: dict[str, Any], seed: int | None = None, max_steps: int | None = None) -> dict[str, Any]:
+def run_trajectory(
+    config: dict[str, Any],
+    seed: int | None = None,
+    max_steps: int | None = None,
+    store_field_snapshots: bool = False,
+) -> dict[str, Any]:
     simulation = config["simulation"]
     ruin_config = config["ruin"]
     rng = Random(int(seed if seed is not None else simulation.get("seed", 42)))
-    square = ProbabilitySquare(config, rng)
+    square = ProbabilitySquare(config, rng, store_field_snapshots=store_field_snapshots)
     network = NetworkSurplus(
         initial_buffer=float(ruin_config["initial_buffer"]),
         barrier=float(ruin_config["barrier"]),
-        sla_threshold=float(ruin_config["sla_threshold"]),
+        sla_threshold=float(ruin_config.get("sla_threshold", 0.12)),
         recovery_rate=float(ruin_config.get("recovery_rate", 0.0)),
     )
     horizon = int(max_steps or simulation.get("shift_duration", 480))
