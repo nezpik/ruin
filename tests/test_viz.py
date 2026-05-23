@@ -25,9 +25,10 @@ def test_save_text_frames(small_config):
 
 @pytest.mark.slow
 def test_save_field_gif_with_real_field(small_ruin_config):
-    """Generate GIF with real field data stored in snapshots."""
+    """Generate GIF with real field data stored in snapshots (typed RuinConfig path)."""
+    # v0.2: pass RuinConfig object directly — no .model_dump()
     result = run_trajectory(
-        small_ruin_config.model_dump(),
+        small_ruin_config,
         seed=42,
         max_steps=30,
         store_field_snapshots=True,
@@ -41,7 +42,7 @@ def test_save_field_gif_with_real_field(small_ruin_config):
         out = Path(tmp) / "test_real_field.gif"
         gif_path = save_field_gif(
             result,
-            small_ruin_config.model_dump(),
+            small_ruin_config,  # pass model directly
             output=out,
             fps=6,
             max_frames=25,

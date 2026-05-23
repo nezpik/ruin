@@ -8,13 +8,18 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Union
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter
 import numpy as np
+
+from ruin.config import to_dict
+from ruin.config_models import RuinConfig
+
+ConfigLike = Union[dict[str, Any], RuinConfig]
 
 
 def save_text_frames(result: dict[str, Any], output: str | Path, limit: int = 10) -> None:
@@ -39,9 +44,20 @@ def save_text_frames(result: dict[str, Any], output: str | Path, limit: int = 10
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def _extract_grid_dims(config: ConfigLike) -> tuple[int, int]:
+    """v0.2 helper: get width/height from either RuinConfig or dict."""
+    if isinstance(config, RuinConfig):
+        sim = config.simulation
+        return int(sim.grid_width), int(sim.grid_height)
+    else:
+        cfg = to_dict(config)
+        sim = cfg.get("simulation", {})
+        return int(sim.get("grid_width", 30)), int(sim.get("grid_height", 30))
+
+
 def animate_probability_square(
     result: dict[str, Any],
-    config: dict[str, Any],
+    config: ConfigLike,
     output: str | Path,
     fps: int = 8,
     dpi: int = 90,
@@ -61,9 +77,8 @@ def animate_probability_square(
     if max_frames is not None:
         snapshots = snapshots[:max_frames]
 
-    sim = config.get("simulation", {})
-    width = int(sim.get("grid_width", 30))
-    height = int(sim.get("grid_height", 30))
+    # v0.2: support both dict and RuinConfig
+    width, height = _extract_grid_dims(config)
 
     fig, ax = plt.subplots(figsize=(8, 6), facecolor="#111111")
     ax.set_facecolor("#111111")
@@ -117,47 +132,44 @@ def animate_probability_square(
             field = np.array(snap["field"], dtype=float)
         else:
             mean_int = snap.get("field_intensity_mean", 0.5)
-            field = np.random.RandomState(t).rand(height, width) * (mean_int + 0.5)
-            field = np.clip(field, 0, 5)
+            field = np.random.default_rng(42).normal(mean_int, 0.8, (height, width))
+            field = np.clip(field, 0, None)
 
         field_img.set_data(field)
-        field_img.set_clim(0, max(2.0, float(field.max()) * 1.1))
 
-        # Q-dots
         qdots = snap.get("qdots", [])
         if qdots:
-            positions = [q.get("position", (0, 0)) for q in qdots]
-            xs = [p[0] for p in positions]
-            ys = [p[1] for p in positions]
-
+            xs = []
+            ys = []
+            for q in qdots:
+                pos = q.get("position")
+                if isinstance(pos, (list, tuple)) and len(pos) == 2:
+                    xs.append(pos[0])
+                    ys.append(pos[1])
+                else:
+                    xs.append(q.get("x", 0))
+                    ys.append(q.get("y", 0))
             colors = []
-            sizes = []
             for q in qdots:
                 if q.get("ruined"):
-                    colors.append(0.0)
-                    sizes.append(18)
-                elif q.get("late"):
-                    colors.append(0.3)
-                    sizes.append(28)
+                    colors.append("red")
                 else:
-                    qtype = q.get("type", "STANDARD")
-                    if qtype == "EXPRESS":
-                        colors.append(0.9)
-                    elif qtype == "BULKY":
-                        colors.append(0.6)
+                    qtype = q.get("type", "standard")
+                    if qtype == "express":
+                        colors.append("cyan")
+                    elif qtype == "bulky":
+                        colors.append("orange")
                     else:
-                        colors.append(0.75)
-                    sizes.append(22)
-
-            scatter.set_offsets(np.c_[xs, ys])
-            scatter.set_array(np.array(colors))
-            scatter.set_sizes(sizes)
+                        colors.append("white")
+            scatter.set_offsets(list(zip(xs, ys)))
+            scatter.set_array(np.array([]))
+            scatter.set_facecolors(colors)
         else:
             scatter.set_offsets(np.empty((0, 2)))
 
-        time_text.set_text(f"t = {t:03d}")
+        time_text.set_text(f"t = {t}")
         state_text.set_text(f"D = {d_state}")
-        pressure_text.set_text(f"chaos={chaos:.3f}  order={order:.3f}")
+        pressure_text.set_text(f"chaos={chaos:.2f}  order={order:.2f}")
 
         return field_img, scatter, time_text, state_text, pressure_text
 
@@ -167,8 +179,7 @@ def animate_probability_square(
         frames=len(snapshots),
         init_func=init,
         interval=1000 / fps,
-        blit=True,
-        repeat=False,
+        blit=False,
     )
 
     writer = PillowWriter(fps=fps)
@@ -180,10 +191,11 @@ def animate_probability_square(
 
 def save_field_gif(
     result: dict[str, Any],
-    config: dict[str, Any],
-    output: str | Path = "ruin_field.gif",
+    config: ConfigLike,
+    output: str | Path,
     fps: int = 8,
     dpi: int = 90,
-    max_frames: int | None = 120,
+    max_frames: int | None = None,
 ) -> Path:
+    """Convenience wrapper around animate_probability_square for real-field GIFs."""
     return animate_probability_square(result, config, output, fps=fps, dpi=dpi, max_frames=max_frames)
