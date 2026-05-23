@@ -167,6 +167,7 @@ class ProbabilitySquare:
             jump_mean = float(getattr(proc, "jump_mean_size", 3.0))
             travel_drift = float(getattr(proc, "travel_drift", 1.2))
             travel_vol = float(getattr(proc, "travel_volatility", 0.4))
+            exposure_multiplier = float(getattr(field, "qdot_exposure_multiplier", 1.0))
         else:
             cfg = to_dict(config)
             processes = cfg.get("processes", {})
@@ -177,6 +178,7 @@ class ProbabilitySquare:
             jump_mean = float(processes.get("jump_mean_size", 3.0))
             travel_drift = float(processes.get("travel_drift", 1.2))
             travel_vol = float(processes.get("travel_volatility", 0.4))
+            exposure_multiplier = float(field_cfg.get("qdot_exposure_multiplier", 1.0))
 
         # v0.2 vectorized shock arrivals (using 1D sampler + reshape)
         n_cells = self.width * self.height
@@ -220,6 +222,11 @@ class ProbabilitySquare:
         active_qdots = [q for q in self.qdots if not q.is_ruined]
         n_active = len(active_qdots)
 
+        # Populate active_by_cell using pre-movement positions (restores v0.1 pressure logic)
+        for q in active_qdots:
+            pos = (q.x, q.y)
+            active_by_cell[pos] = active_by_cell.get(pos, 0) + 1
+
         if n_active > 0:
             xs = np.array([q.x for q in active_qdots], dtype=int)
             ys = np.array([q.y for q in active_qdots], dtype=int)
@@ -239,7 +246,7 @@ class ProbabilitySquare:
                 qdot.x = int(new_xs[i])
                 qdot.y = int(new_ys[i])
                 qdot.time_window = float(new_tws[i])
-                qdot.field_exposure = exposures[i]
+                qdot.field_exposure = exposures[i] * exposure_multiplier   # restored qdot_exposure_multiplier
 
                 if (qdot.x, qdot.y) != before:
                     moving_by_cell[(qdot.x, qdot.y)] = moving_by_cell.get((qdot.x, qdot.y), 0) + 1
