@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from ruin.config import load_config, load_ruin_config
+from ruin.config_models import RuinConfig
 from ruin.risk.ruin_probability import run_monte_carlo
 from ruin.simulation.agent_based import run_trajectory
 from ruin.viz.square import save_text_frames, save_field_gif
@@ -37,27 +38,22 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    # Prefer validated Pydantic config (v0.2), fall back to raw dict for compatibility
+    # Prefer validated Pydantic config (v0.2) — pass the model directly now that functions accept it
     try:
-        config = load_ruin_config(args.config)
-        use_pydantic = True
+        config: RuinConfig | dict[str, Any] = load_ruin_config(args.config)
     except Exception:
         config = load_config(args.config)
-        use_pydantic = False
 
     if args.command == "simulate":
         store_field = bool(args.visualize)
 
-        # Pass model_dump() when using Pydantic for backward compat with current internals
-        config_for_sim = config.model_dump() if use_pydantic else config
-
-        result = run_trajectory(config_for_sim, max_steps=args.max_steps, store_field_snapshots=store_field)
+        result = run_trajectory(config, max_steps=args.max_steps, store_field_snapshots=store_field)
 
         save_text_frames(result, Path(args.output), limit=args.frames)
 
         if args.visualize:
             gif_path = Path(args.output).with_suffix(".gif")
-            save_field_gif(result, config_for_sim, output=gif_path, fps=8, max_frames=120)
+            save_field_gif(result, config, output=gif_path, fps=8, max_frames=120)
             print(f"Animation written to {gif_path}")
 
         summary = {
@@ -72,9 +68,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "risk":
-        config_for_risk = config.model_dump() if use_pydantic else config
         result = run_monte_carlo(
-            config_for_risk,
+            config,
             paths=args.paths,
             confidence=args.confidence,
             max_steps=args.max_steps,
@@ -83,8 +78,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result, indent=2))
         return 0
 
-    parser.error("unknown command")
-    return 2
+    return 1
 
 
 if __name__ == "__main__":

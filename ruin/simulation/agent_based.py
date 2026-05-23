@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 from random import Random
-from typing import Any
+from typing import Any, Union
 
 from ruin.config import to_dict
+from ruin.config_models import RuinConfig
 from ruin.core.network import NetworkSurplus
 from ruin.state_space.probability_square import ProbabilitySquare
 
 
+ConfigLike = Union[dict[str, Any], RuinConfig]
+
+
 def run_trajectory(
-    config: dict[str, Any] | Any,  # accepts dict or RuinConfig (Pydantic)
+    config: ConfigLike,
     seed: int | None = None,
     max_steps: int | None = None,
     store_field_snapshots: bool = False,
@@ -19,7 +23,7 @@ def run_trajectory(
     simulation = cfg["simulation"]
     ruin_config = cfg["ruin"]
     rng = Random(int(seed if seed is not None else simulation.get("seed", 42)))
-    square = ProbabilitySquare(cfg, rng, store_field_snapshots=store_field_snapshots)
+    square = ProbabilitySquare(config, rng, store_field_snapshots=store_field_snapshots)  # pass original for future direct access
     network = NetworkSurplus(
         initial_buffer=float(ruin_config["initial_buffer"]),
         barrier=float(ruin_config["barrier"]),
@@ -29,7 +33,7 @@ def run_trajectory(
     horizon = int(max_steps or simulation.get("shift_duration", 480))
 
     for time in range(1, horizon + 1):
-        snapshot = square.step(cfg, network.ruined)
+        snapshot = square.step(config, network.ruined)  # pass original
         network.update(time, float(snapshot["penalty"]), int(snapshot["late_count"]), len(square.qdots))
         if network.ruined:
             square.d_state = square.d_state.RUINED

@@ -8,15 +8,19 @@ from __future__ import annotations
 import os
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from statistics import mean, stdev
-from typing import Any
+from typing import Any, Union
 
 import numpy as np
 
 from ruin.config import to_dict
+from ruin.config_models import RuinConfig
 from ruin.simulation.agent_based import run_trajectory
 
 
-def _run_one_path(config: dict[str, Any] | Any, seed: int, max_steps: int | None) -> dict[str, Any]:
+ConfigLike = Union[dict[str, Any], RuinConfig]
+
+
+def _run_one_path(config: ConfigLike, seed: int, max_steps: int | None) -> dict[str, Any]:
     """Top-level worker for parallel Monte Carlo (must be picklable)."""
     cfg = to_dict(config)
     return run_trajectory(cfg, seed=seed, max_steps=max_steps)
@@ -66,7 +70,7 @@ def bootstrap_ci(
 
 
 def run_monte_carlo(
-    config: dict[str, Any] | Any,
+    config: ConfigLike,
     paths: int | None = None,
     confidence: float | None = None,
     max_steps: int | None = None,
@@ -91,7 +95,7 @@ def run_monte_carlo(
     results: list[dict[str, Any]] = []
     with ProcessPoolExecutor(max_workers=n_jobs) as executor:
         futures = {
-            executor.submit(_run_one_path, cfg, base_seed + i, max_steps): i
+            executor.submit(_run_one_path, config, base_seed + i, max_steps): i
             for i in range(n_paths)
         }
         for future in as_completed(futures):

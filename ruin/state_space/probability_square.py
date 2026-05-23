@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from random import Random
-from typing import Any
+from typing import Any, Union
 
 import numpy as np
 
 from ruin.config import to_dict
+from ruin.config_models import RuinConfig
 from ruin.core.processes import batch_qdot_travel_step, make_rng, sample_shock_arrivals
 from ruin.core.qdot import QDot, QDotType
 from ruin.metrics.pressure import (
@@ -19,8 +20,11 @@ from ruin.metrics.pressure import (
 from ruin.state_space.disruption_field import DisruptionField
 
 
+ConfigLike = Union[dict[str, Any], RuinConfig]
+
+
 class ProbabilitySquare:
-    def __init__(self, config: dict[str, Any] | Any, rng: Random, store_field_snapshots: bool = False) -> None:
+    def __init__(self, config: ConfigLike, rng: Random, store_field_snapshots: bool = False) -> None:
         cfg = to_dict(config)  # support both dict and RuinConfig Pydantic models
 
         simulation = cfg["simulation"]
@@ -97,7 +101,7 @@ class ProbabilitySquare:
                 qid += 1
         self.initial_qdots = len(self.qdots)
 
-    def step(self, config: dict[str, Any] | Any, system_ruined: bool = False) -> dict[str, Any]:
+    def step(self, config: ConfigLike, system_ruined: bool = False) -> dict[str, Any]:
         cfg = to_dict(config)
         self.time += 1
         processes = cfg.get("processes", {})
