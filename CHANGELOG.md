@@ -60,6 +60,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Q-dot snapshot position extraction in visualization (handles both legacy and new `position` tuple format)
 - Various edge cases in parallel MC worker and field snapshot handling
+- **Devin PR #1 review findings (v0.2 Foundation Hardening)**
+  - Restored population of `active_by_cell` before vectorized movement in `ProbabilitySquare.step()` — this was silently breaking `failed_ratio`, `local_chaos_pressure`, and per-QDot `order_pressure` calculations after the vectorization work.
+  - Re-enabled `qdot_exposure_multiplier` (from both Pydantic `DisruptionFieldConfig` and legacy dict) when computing `field_exposure` on Q-dots.
+- Added dedicated regression tests (`tests/test_pressure_and_exposure.py`) to prevent recurrence of the above two issues.
 
 ### Documentation
 

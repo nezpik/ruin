@@ -160,6 +160,8 @@ These are explicitly deferred until the abstract mechanics are solid and reprodu
 - Real-field visualization with animated GIFs
 - Parallel Monte Carlo with bootstrap confidence intervals
 
+**Post-review fixes (Devin PR #1):** Critical regressions in pressure calculations (`active_by_cell`) and `qdot_exposure_multiplier` handling were identified during external review and have been corrected with dedicated regression tests.
+
 **Next Foundation items (suggested order):**
 - Performance benchmarking harness + profiling
 - Structured logging + better error messages / validation UX
