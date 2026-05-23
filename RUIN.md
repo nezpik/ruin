@@ -4,9 +4,11 @@
 
 [![Python](https://img.shields.io/badge/Python-3.11--3.14-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![v0.1 – Last-Mile Q-Dot Edition](https://img.shields.io/badge/Version-v0.1%20Concept-orange.svg)](https://github.com/nezpik/ruin)
+[![v0.2 Foundation Hardening](https://img.shields.io/badge/Version-v0.2%20Foundation-green.svg)](https://github.com/nezpik/ruin)
 
 RUIN is a framework for measuring and visualizing logistics systems as stochastic risk-bearing portfolios. It translates quantitative finance concepts such as Cramér-Lundberg ruin theory, jump diffusion, geometric Brownian motion, Monte Carlo paths, VaR, and Expected Shortfall into a logistics language built around physical uncertainty, service failure, and systemic collapse.
+
+> **v0.2 Status**: The core simulation engine, vectorized primitives, typed configuration, parallel risk analysis, and real-field visualization have been hardened. The conceptual foundation in this document remains the north star.
 
 The central object is the **Probability Square**: an abstract two-dimensional destiny frame `D` where many **Q dots** move through possible physical futures. RUIN is not trying to make logistics look deterministic, and it is not trying to predict destiny perfectly. RUIN frames chaos so that physical uncertainty can move, take shape, and become measurable.
 

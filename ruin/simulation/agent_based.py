@@ -1,27 +1,57 @@
 from __future__ import annotations
 
 from random import Random
-from typing import Any
+from typing import Any, Union
 
+from ruin.config import to_dict
+from ruin.config_models import RuinConfig
 from ruin.core.network import NetworkSurplus
 from ruin.state_space.probability_square import ProbabilitySquare
 
 
-def run_trajectory(config: dict[str, Any], seed: int | None = None, max_steps: int | None = None) -> dict[str, Any]:
-    simulation = config["simulation"]
-    ruin_config = config["ruin"]
-    rng = Random(int(seed if seed is not None else simulation.get("seed", 42)))
-    square = ProbabilitySquare(config, rng)
-    network = NetworkSurplus(
-        initial_buffer=float(ruin_config["initial_buffer"]),
-        barrier=float(ruin_config["barrier"]),
-        sla_threshold=float(ruin_config["sla_threshold"]),
-        recovery_rate=float(ruin_config.get("recovery_rate", 0.0)),
-    )
-    horizon = int(max_steps or simulation.get("shift_duration", 480))
+ConfigLike = Union[dict[str, Any], RuinConfig]
+
+
+def run_trajectory(
+    config: ConfigLike,
+    seed: int | None = None,
+    max_steps: int | None = None,
+    store_field_snapshots: bool = False,
+) -> dict[str, Any]:
+    # v0.2: prefer direct Pydantic attributes when a validated RuinConfig is passed
+    if isinstance(config, RuinConfig):
+        sim = config.simulation
+        ruin_cfg = config.ruin
+        effective_seed = seed if seed is not None else getattr(sim, "seed", 42)
+        horizon = int(max_steps or getattr(sim, "shift_duration", 480))
+
+        square = ProbabilitySquare(config, Random(int(effective_seed)), store_field_snapshots=store_field_snapshots)
+
+        network = NetworkSurplus(
+            initial_buffer=float(ruin_cfg.initial_buffer),
+            barrier=float(getattr(ruin_cfg, "barrier", 0.0)),
+            sla_threshold=float(getattr(ruin_cfg, "sla_threshold", 0.12)),
+            recovery_rate=float(getattr(ruin_cfg, "recovery_rate", 0.0)),
+        )
+    else:
+        cfg = to_dict(config)
+        simulation = cfg["simulation"]
+        ruin_config = cfg["ruin"]
+        effective_seed = seed if seed is not None else simulation.get("seed", 42)
+        horizon = int(max_steps or simulation.get("shift_duration", 480))
+
+        rng = Random(int(effective_seed))
+        square = ProbabilitySquare(config, rng, store_field_snapshots=store_field_snapshots)
+
+        network = NetworkSurplus(
+            initial_buffer=float(ruin_config["initial_buffer"]),
+            barrier=float(ruin_config["barrier"]),
+            sla_threshold=float(ruin_config.get("sla_threshold", 0.12)),
+            recovery_rate=float(ruin_config.get("recovery_rate", 0.0)),
+        )
 
     for time in range(1, horizon + 1):
-        snapshot = square.step(config, network.ruined)
+        snapshot = square.step(config, network.ruined)  # pass original (now supports Pydantic)
         network.update(time, float(snapshot["penalty"]), int(snapshot["late_count"]), len(square.qdots))
         if network.ruined:
             square.d_state = square.d_state.RUINED

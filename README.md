@@ -1,308 +1,188 @@
 # RUIN: Ruin-probability Unified In Networks
 
-**Destiny-framed ruin risk for physical logistics flow.**
+**Destiny-framed ruin risk for stochastic logistics flow.**
 
 [![Python](https://img.shields.io/badge/Python-3.11--3.14-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![v0.1 Concept MVP](https://img.shields.io/badge/Version-v0.1%20MVP-orange.svg)](https://github.com/nezpik/ruin)
+[![v0.2 Foundation](https://img.shields.io/badge/Version-v0.2%20Foundation-green.svg)](https://github.com/nezpik/ruin)
 
-RUIN is a research-grade framework for seeing when physical logistics systems run out of destiny.
+RUIN is a research-grade framework for measuring when physical logistics systems run out of destiny. It translates quantitative finance concepts (ruin theory, jump-diffusion, Monte Carlo paths, VaR, Expected Shortfall, bootstrap confidence intervals) into a logistics language built around **physical uncertainty**, **service failure**, and **systemic collapse**.
 
-It uses quantitative finance ideas like ruin theory, jump diffusion, Monte Carlo paths, Value at Risk, and Expected Shortfall, but it is not just a prediction engine. RUIN frames logistics uncertainty as motion inside a bounded destiny field `D`, where **Q dots** try to create order inside chaotic physical flow.
+The central object is the **Probability Square** — an abstract two-dimensional **destiny frame `D`** inside which many **Q dots** (delivery commitments, route obligations, flow units) move through possible futures.
+
+RUIN does not try to predict the future perfectly. It gives chaos a bounded frame so that uncertainty can move, organize, propagate, and become measurable.
 
 ---
 
-## Core Idea
+## Core Philosophy
 
-Most logistics models ask:
-
-> Can we predict the route, delay, or cost?
-
-RUIN asks something different:
-
-> When does physical flow lose the ability to preserve order?
+> A physical system ruins when it runs out of destiny.
 
 In RUIN:
-
-- **`D`** is the destiny frame: the bounded field where logistics futures unfold.
-- **Q dots** are delivery commitments, route obligations, flow units, or Monte Carlo futures moving inside `D`.
-- **Q dots cannot leave `D`**. They can drift, jump, cluster, stall, recover, fail, or ruin, but they remain destiny-bound.
-- **Disruption can be an event or the state of the grid itself**.
-- **Ruin** occurs when system surplus is exhausted or service-level failure crosses a barrier.
-
-RUIN does not try to smooth chaos away. It gives chaos a frame so it can move, organize, propagate, and collapse visibly.
+- **`D`** (the destiny frame) bounds all possible futures. Q dots cannot leave `D`.
+- **Q dots** are quantized attempts at order — they drift, jump, cluster, stall, recover, fail, or ruin inside the frame.
+- **Disruption** is spatial and propagating: a field that intensifies, spreads, decays, and reshapes movement.
+- **Ruin** occurs when operational surplus is exhausted or service-level barriers are breached.
+- **Visualization** is analysis: the Probability Square makes the negotiation between order and chaos visible.
 
 ---
 
-## v0.1 Use Case
+## v0.2 Highlights (Foundation Hardening)
 
-### Urban Ruin Shift
+RUIN v0.2 has moved from pure-stdlib concept to a credible, usable research instrument:
 
-RUIN v0.1 models one abstract last-mile delivery shift on a rectangular Probability Square.
+- **Vectorized stochastic processes** — NumPy-backed GBM, compound Poisson jumps, and shock arrivals for speed and reproducibility
+- **Vectorized QDot batch travel** — hot loop replaced with `batch_qdot_travel_step()` for significant acceleration
+- **Real disruption field storage** — full 30×30 field grids captured in snapshots (no more synthetic noise)
+- **High-quality Matplotlib GIF visualization** — animated Probability Square + real propagating disruption field with Q-dot movement and ruin dynamics (`--visualize`)
+- **Parallel Monte Carlo** — `ProcessPoolExecutor` with automatic core detection (`--jobs`)
+- **Statistically credible risk analysis** — bootstrap confidence intervals for ruin probability + loss standard deviation
+- **Typed configuration foundation** — Pydantic + NumPy/Matplotlib runtime dependencies
+- **Comprehensive test suite** — 19+ passing tests guarding golden behavior
 
-The MVP does **not** use real maps, live traffic APIs, routing optimization, reinforcement learning, or customer data. It focuses on the smallest meaningful RUIN world:
+All core mechanics, D-state transitions, surplus ruin rules, and the original "Urban Ruin Shift" example remain faithful to the v0.1 vision.
 
-1. Q dots spawn inside `D`.
-2. They move through the Probability Square.
-3. Disruptions appear as cell-level field intensity.
-4. Disruptions propagate, decay, and recover.
-5. Q dots experience field exposure and lose slack.
-6. Q-dot density, delay, and failure reshape `D`.
-7. The grid moves through D-states.
-8. The surplus process tracks whether the system ruins.
-
----
-
-## How It Works
-
-RUIN v0.1 is built around a simple simulation loop.
-
-### 1. Initialize `D`
-
-`D` is represented by the `ProbabilitySquare`:
-
-- width
-- height
-- time
-- Q dots
-- disruption field
-- current D-state
-- chaos pressure
-- order pressure
-
-The grid is not a map yet. It is a controlled physical-risk field.
-
-### 2. Spawn Q dots
-
-Q dots are typed commitments:
-
-- `STANDARD`: balanced movement and penalty
-- `EXPRESS`: tighter time window, higher SLA pressure
-- `BULKY`: slower movement, higher penalty
-
-Each Q dot carries:
-
-- position inside `D`
-- time-window slack
-- delay penalty
-- field exposure
-- D-state exposure
-- order pressure
-- local ruined/late state
-
-### 3. Inject disruption
-
-The `DisruptionField` stores physical-flow pressure across cells.
-
-Disruptions can represent:
-
-- congestion waves
-- accidents
-- weather cells
-- failed handoffs
-- demand bursts
-- local bottlenecks
-
-Each shock has intensity, memory, propagation, decay, and recovery.
-
-### 4. Compute pressure
-
-RUIN tracks two opposing forces.
-
-**Chaos pressure** measures disruption, congestion memory, and failed Q-dot pressure.
-
-```text
-local_chaos_pressure(cell, t)
-  = disruption_intensity(cell, t)
-  + congestion_memory(cell, t)
-  + local_failed_qdot_ratio(cell, t)
-```
-
-**Order pressure** measures the attempt of Q dots to preserve service, flow, and completion.
-
-```text
-local_order_pressure(cell, t)
-  = active_qdots(cell, t)
-  + moving_qdots(cell, t)
-  - failed_qdots(cell, t)
-```
-
-### 5. Update D-state
-
-The Probability Square moves through regimes:
-
-| D-state | Meaning |
-| --- | --- |
-| `STABLE` | Q dots move with low field pressure and surplus is healthy |
-| `STRESSED` | pressure rises but flow remains coherent |
-| `DISRUPTED` | disruption becomes dominant in part of the grid |
-| `CHAOTIC` | clusters, stalls, forced paths, and unstable flow appear |
-| `RECOVERING` | field intensity decays and order begins to return |
-| `RUINED` | surplus or SLA barrier has been breached |
-
-### 6. Move Q dots inside destiny
-
-Each Q dot samples movement from the stochastic process, but movement remains bounded inside `D`.
-
-Field exposure slows Q dots, consumes slack, and increases failure pressure.
-
-### 7. Update surplus and ruin
-
-RUIN uses a surplus process:
-
-```text
-U(t) = U(0) + C(t) - L(t)
-```
-
-Ruin occurs if:
-
-```text
-U(t) <= barrier
-```
-
-or if:
-
-```text
-late_qdots / active_qdots >= sla_threshold
-```
+See [CHANGELOG.md](CHANGELOG.md) for the full detailed list of v0.2 Foundation Hardening changes.
 
 ---
 
-## Install
+## Quickstart
 
-Clone the repo:
+### Install
 
 ```bash
 git clone https://github.com/nezpik/ruin.git
 cd ruin
+python -m pip install -e ".[test]"
 ```
 
-Install editable:
+Requires Python ≥ 3.11. Core dependencies: `numpy`, `pydantic`, `matplotlib`.
+
+### Run One Visible Trajectory + GIF
 
 ```bash
-python -m pip install -e .
+ruin simulate --config examples/urban_ruin_shift.yaml --max-steps 40 --visualize --output /tmp/ruin_shift.txt
 ```
 
-RUIN v0.1 is currently dependency-free and runs with the Python standard library.
+This produces:
+- Text frames (`/tmp/ruin_shift.txt`)
+- Real animated GIF (`/tmp/ruin_shift.gif`) showing the actual disruption field propagating, Q-dots moving and ruining, D-state evolution, and pressure metrics
 
-Recommended implementation target is Python 3.11 or 3.12. The current package metadata allows Python 3.11 through 3.14 while the MVP remains dependency-free.
-
----
-
-## Run One Urban Ruin Shift
+### Run Monte Carlo Risk Analysis (Parallel)
 
 ```bash
-python -m ruin.cli simulate --config examples/urban_ruin_shift.yaml --max-steps 80 --frames 8 --output ruin_frames.txt
+ruin risk --config examples/urban_ruin_shift.yaml --paths 200 --max-steps 50 --jobs 4
 ```
 
-Example output:
+Example output (truncated):
 
 ```json
 {
-  "ruined": true,
-  "ruin_time": 60,
-  "ruin_reason": "surplus",
-  "final_surplus": -19.936585,
-  "final_d_state": "RUINED",
-  "frames_written": "ruin_frames.txt"
+  "paths": 200,
+  "ruin_probability": 1.0,
+  "ruin_probability_ci": [1.0, 1.0],
+  "mean_loss": 265.0153,
+  "loss_std": 82.4,
+  "value_at_risk": 340.2,
+  "expected_shortfall": 352.1,
+  "mean_time_to_ruin": 21.8,
+  "n_jobs": 4
 }
 ```
 
-The frame file shows sampled Probability Square states:
-
-```text
-t=1 D=STABLE chaos=0.0 order=0.222222 penalty=0.0
-t=43 D=STABLE chaos=0.064419 order=0.222222 penalty=0.0
-t=60 D=CHAOTIC chaos=0.810872 order=-0.022222 penalty=71.09539
-```
+The `--jobs` flag controls parallelism (defaults to available cores).
 
 ---
 
-## Run Monte Carlo Risk
+## Core Vocabulary (Preserved from v0.1)
 
-```bash
-python -m ruin.cli risk --config examples/urban_ruin_shift.yaml --paths 10 --max-steps 80
-```
+- **Destiny frame `D`**: The bounded space in which all logistics futures unfold.
+- **Probability Square**: The computational and visual representation of `D` (grid + field + state).
+- **Q dot**: A quantized logistics commitment carrying time-window, penalty, drift/volatility multipliers, and field exposure.
+- **Disruption Propagation Field**: Spatial memory of shocks that intensifies, propagates, decays, and recovers.
+- **D-state**: Regime of the grid (`STABLE` → `STRESSED` → `DISRUPTED` → `CHAOTIC` → `RECOVERING` → `RUINED`).
+- **Surplus process**: `U(t) = U(0) + C(t) - L(t)`. Ruin when `U(t) <= barrier` or SLA failure crosses threshold.
 
-The risk command reports:
-
-- ruin probability
-- mean loss
-- Value at Risk
-- Expected Shortfall
-- time-to-ruin samples
-- mean time to ruin
+Full definitions and deeper philosophy are in `RUIN.md`.
 
 ---
 
-## Current Package Layout
+## Current Architecture (v0.2)
 
-```text
+```
 ruin/
 ├── core/
-│   ├── qdot.py
-│   ├── network.py
-│   └── processes.py
-├── metrics/
-│   └── pressure.py
+│   ├── qdot.py              # Scalar QDot model (still used for state)
+│   ├── network.py           # Surplus & SLA tracking
+│   └── processes.py         # Vectorized GBM, jumps, shocks, batch travel
 ├── state_space/
-│   ├── probability_square.py
+│   ├── probability_square.py   # Main engine (now heavily vectorized)
 │   └── disruption_field.py
 ├── simulation/
 │   └── agent_based.py
 ├── risk/
-│   └── ruin_probability.py
+│   └── ruin_probability.py     # Parallel MC + bootstrap CI + VaR/ES
 ├── viz/
-│   └── square.py
+│   └── square.py               # Matplotlib FuncAnimation + real-field GIFs
+├── metrics/
+│   └── pressure.py
 ├── config.py
 └── cli.py
 ```
 
 ---
 
-## What v0.1 Is
+## What v0.2 Is
 
-RUIN v0.1 is:
-
-- a concept-first logistics ruin-risk MVP
-- an abstract last-mile physical-flow simulator
-- a destiny-frame model for Q dots
-- a disruption propagation field
-- a surplus and SLA ruin model
-- a Monte Carlo tail-risk tool
-
-## What v0.1 Is Not Yet
-
-RUIN v0.1 is not yet:
-
-- a real map or GIS system
-- a vehicle routing optimizer
-- a live traffic system
-- a reinforcement learning environment
-- a calibrated production logistics model
-- a full visualization engine
+- A **research instrument** for studying logistics ruin under bounded destiny
+- A **visual + quantitative** tool for disruption propagation and order pressure
+- A **fast, parallel, statistically grounded** Monte Carlo engine
+- An **abstract but extensible** foundation (no real maps yet — by design)
 
 ---
 
-## Roadmap
+## What v0.2 Is Not (Yet)
 
-Near-term:
+- A GIS / real-road simulator
+- A vehicle routing optimizer
+- A calibrated production forecasting tool
+- A reinforcement-learning environment
 
-- add tests
-- add real YAML parsing with `pyyaml`
-- add NumPy-backed simulation paths
-- add Matplotlib or Plotly animation
-- add richer chaotic organization detection
-- add package publishing metadata
+These are explicitly deferred until the abstract mechanics are solid and reproducible.
 
-Later:
+---
 
-- real road graphs
-- routing policies
-- depot and fleet constraints
-- calibration from real logistics data
-- hedging and backup-capacity policies
-- live disruption feeds
+## Roadmap (Post-v0.2)
+
+**Foundation complete.** The following are now production-grade in v0.2:
+- Typed Pydantic configuration with direct attribute access
+- Vectorized NumPy primitives + batch Q-dot movement
+- Real-field visualization with animated GIFs
+- Parallel Monte Carlo with bootstrap confidence intervals
+
+**Post-review fixes (Devin PR #1):** Critical regressions in pressure calculations (`active_by_cell`) and `qdot_exposure_multiplier` handling were identified during external review and have been corrected with dedicated regression tests.
+
+**Next Foundation items (suggested order):**
+- Performance benchmarking harness + profiling
+- Structured logging + better error messages / validation UX
+- Snapshot export (Parquet / JSONL) for external analysis
+- Property-based + mutation testing expansion
+
+**Later (when the abstract core is trusted):**
+- Real road graphs and spatial topologies
+- Fleet/depot constraints
+- Calibration against real logistics data
+- Hedging and backup-capacity policies
+
+---
+
+## Run the Test Suite
+
+```bash
+pytest -q
+```
+
+All tests must pass before any research use of a commit.
 
 ---
 
@@ -310,14 +190,12 @@ Later:
 
 RUIN was created by **Naji Zouiti**.
 
-If you use RUIN, its concepts, terminology, diagrams, code, or experimental outputs in academic work, research prototypes, papers, theses, presentations, or derivative projects, please give clear credit to the original project and author.
+If you use RUIN, its concepts, terminology, code, or experimental outputs in academic work, please cite the project.
 
 Suggested citation:
 
-```text
-Zouiti, Naji. RUIN: Ruin-probability Unified In Networks. v0.1, 2026.
-GitHub: https://github.com/nezpik/ruin
-```
+> Zouiti, Naji. RUIN: Ruin-probability Unified In Networks. v0.2 Foundation, 2026.  
+> GitHub: https://github.com/nezpik/ruin
 
 BibTeX:
 
@@ -326,19 +204,19 @@ BibTeX:
   author = {Zouiti, Naji},
   title = {RUIN: Ruin-probability Unified In Networks},
   year = {2026},
-  version = {0.1.0},
+  version = {0.2.0-dev},
   url = {https://github.com/nezpik/ruin}
 }
 ```
 
-When discussing the framework academically, please preserve the core attribution that RUIN introduces a destiny-framed approach to logistics uncertainty using `D`, Q dots, chaotic organization, disruption propagation, and ruin probability.
+---
+
+## Philosophy (Closing)
+
+RUIN does not smooth chaos away. It gives chaos a frame (`D`) so that the negotiation between order pressure and disruption can be watched, measured, and understood — until the system either preserves its destiny or runs out of it.
+
+The Probability Square is not decoration. It is the laboratory in which we study when physical flow loses the ability to keep its promises.
 
 ---
 
-## Philosophy
-
-RUIN is built around one sentence:
-
-> A physical system ruins when it runs out of destiny.
-
-The Probability Square is not decoration. It is a way to watch order and chaos negotiate inside `D` until the system survives, recovers, or collapses.
+*Maintained by Naji Zouiti • MIT License • 2026*
