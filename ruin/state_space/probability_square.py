@@ -25,7 +25,6 @@ ConfigLike = Union[dict[str, Any], RuinConfig]
 
 class ProbabilitySquare:
     def __init__(self, config: ConfigLike, rng: Random, store_field_snapshots: bool = False) -> None:
-        cfg = to_dict(config)  # support both dict and RuinConfig Pydantic models
         self._raw_config: ConfigLike = config  # keep original for typed access during v0.2 migration
 
         # v0.2: prefer Pydantic attributes when a validated RuinConfig is passed
@@ -34,6 +33,7 @@ class ProbabilitySquare:
             self.width = int(sim.grid_width)
             self.height = int(sim.grid_height)
         else:
+            cfg = to_dict(config)
             simulation = cfg["simulation"]
             self.width = int(simulation["grid_width"])
             self.height = int(simulation["grid_height"])
@@ -53,12 +53,11 @@ class ProbabilitySquare:
 
         self.time = 0
 
-        # v0.2: extract sections with Pydantic attribute preference
+        # v0.2: extract sections with Pydantic attribute preference (and prepare qdots_cfg compat dict)
         if isinstance(self._raw_config, RuinConfig):
             square_cfg = self._raw_config.probability_square
             field_cfg = self._raw_config.disruption_field
             self.d_state = DState(str(getattr(square_cfg, "initial_d_state", "stable")).upper())
-            # Normalize to dict so .get() works in choose_d_state call
             d_thresh = getattr(square_cfg, "d_state_thresholds", None)
             self.thresholds = d_thresh.model_dump() if d_thresh is not None else {}
             self.qdot_feedback_weight = float(getattr(square_cfg, "qdot_feedback_weight", 0.5))
@@ -68,7 +67,28 @@ class ProbabilitySquare:
             prop_d = float(getattr(field_cfg, "propagation_decay", 0.55))
             temp_d = float(getattr(field_cfg, "temporal_decay", 0.12))
             rec_r = float(getattr(field_cfg, "recovery_rate", 0.08))
+
+            # Build flat qdots dict for the existing creation loop (Pydantic path)
+            qdots = self._raw_config.qdots
+            qdots_cfg = {
+                "n_standard": qdots.n_standard,
+                "n_express": qdots.n_express,
+                "n_bulky": qdots.n_bulky,
+                "standard_time_window": qdots.standard.time_window,
+                "standard_delay_penalty": qdots.standard.delay_penalty,
+                "standard_drift_multiplier": qdots.standard.drift_multiplier,
+                "standard_volatility_multiplier": qdots.standard.volatility_multiplier,
+                "express_time_window": qdots.express.time_window,
+                "express_delay_penalty": qdots.express.delay_penalty,
+                "express_drift_multiplier": qdots.express.drift_multiplier,
+                "express_volatility_multiplier": qdots.express.volatility_multiplier,
+                "bulky_time_window": qdots.bulky.time_window,
+                "bulky_delay_penalty": qdots.bulky.delay_penalty,
+                "bulky_drift_multiplier": qdots.bulky.drift_multiplier,
+                "bulky_volatility_multiplier": qdots.bulky.volatility_multiplier,
+            }
         else:
+            cfg = to_dict(config)  # only for legacy dict path
             square = cfg["probability_square"]
             field_config = cfg["disruption_field"]
             self.d_state = DState(str(square.get("initial_d_state", "stable")).upper())
@@ -80,6 +100,8 @@ class ProbabilitySquare:
             prop_d = float(field_config.get("propagation_decay", 0.55))
             temp_d = float(field_config.get("temporal_decay", 0.12))
             rec_r = float(field_config.get("recovery_rate", 0.08))
+
+            qdots_cfg = cfg.get("qdots", {})
 
         self.previous_chaos_pressure = 0.0
         self.global_chaos_pressure = 0.0
@@ -100,7 +122,6 @@ class ProbabilitySquare:
             self.np_rng,
         )
 
-        qdots_cfg = cfg.get("qdots", {})
         self.qdots: list[QDot] = []
         qid = 0
         for qtype, count in [
