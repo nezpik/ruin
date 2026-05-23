@@ -42,6 +42,8 @@ RUIN v0.2 has moved from pure-stdlib concept to a credible, usable research inst
 
 All core mechanics, D-state transitions, surplus ruin rules, and the original "Urban Ruin Shift" example remain faithful to the v0.1 vision.
 
+See [CHANGELOG.md](CHANGELOG.md) for the full detailed list of v0.2 Foundation Hardening changes.
+
 ---
 
 ## Quickstart
@@ -152,19 +154,23 @@ These are explicitly deferred until the abstract mechanics are solid and reprodu
 
 ## Roadmap (Post-v0.2)
 
-**Next phases (Foundation complete):**
-- Full Pydantic models for configuration validation
-- Property-based testing + golden-run regression suite
-- Performance benchmarking harness
-- Export of snapshots to Parquet / JSON for external analysis
-- Improved animation (blitting, color legends, multiple views)
+**Foundation complete.** The following are now production-grade in v0.2:
+- Typed Pydantic configuration with direct attribute access
+- Vectorized NumPy primitives + batch Q-dot movement
+- Real-field visualization with animated GIFs
+- Parallel Monte Carlo with bootstrap confidence intervals
 
-**Later (when foundation is trusted):**
+**Next Foundation items (suggested order):**
+- Performance benchmarking harness + profiling
+- Structured logging + better error messages / validation UX
+- Snapshot export (Parquet / JSONL) for external analysis
+- Property-based + mutation testing expansion
+
+**Later (when the abstract core is trusted):**
 - Real road graphs and spatial topologies
 - Fleet/depot constraints
 - Calibration against real logistics data
 - Hedging and backup-capacity policies
-- Live disruption feeds
 
 ---
 
