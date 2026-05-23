@@ -133,10 +133,10 @@ class ProbabilitySquare:
         self.initial_qdots = len(self.qdots)
 
     def step(self, config: ConfigLike, system_ruined: bool = False) -> dict[str, Any]:
-        cfg = to_dict(config)
         self.time += 1
 
-        # v0.2: prefer direct Pydantic attributes when available
+        # v0.2: prefer direct Pydantic attributes when available.
+        # Only call to_dict() in the legacy dict fallback branch (avoids conversion cost on every step).
         if isinstance(self._raw_config, RuinConfig):
             proc = self._raw_config.processes
             field = self._raw_config.disruption_field
@@ -147,6 +147,7 @@ class ProbabilitySquare:
             travel_drift = float(getattr(proc, "travel_drift", 1.2))
             travel_vol = float(getattr(proc, "travel_volatility", 0.4))
         else:
+            cfg = to_dict(config)
             processes = cfg.get("processes", {})
             field_cfg = cfg.get("disruption_field", {})
             shock_rate = float(field_cfg.get("shock_arrival_rate", 0.05))
