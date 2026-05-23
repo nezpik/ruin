@@ -31,3 +31,21 @@ def test_run_monte_carlo_golden_parallel(golden_config):
     assert result["paths"] == 30
     assert result["ruin_probability"] > 0.3
     assert result.get("n_jobs") is not None
+
+
+# v0.2 typed config tests — exercise direct RuinConfig path
+def test_run_monte_carlo_small_parallel_typed(golden_ruin_config):
+    """Same small parallel test but passing RuinConfig model directly."""
+    result = run_monte_carlo(golden_ruin_config, paths=12, max_steps=30, n_jobs=2)
+    assert result["paths"] == 12
+    assert 0.0 <= result["ruin_probability"] <= 1.0
+    assert "ruin_probability_ci" in result
+    assert "n_jobs" in result
+
+
+def test_run_monte_carlo_golden_parallel_typed(golden_ruin_config):
+    """Golden parallel test using typed Pydantic config."""
+    result = run_monte_carlo(golden_ruin_config, paths=20, max_steps=40, n_jobs=2)
+    assert "ruin_probability_ci" in result
+    assert result["paths"] == 20
+    assert result.get("n_jobs") is not None
