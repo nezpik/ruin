@@ -21,9 +21,11 @@ ConfigLike = Union[dict[str, Any], RuinConfig]
 
 
 def _run_one_path(config: ConfigLike, seed: int, max_steps: int | None) -> dict[str, Any]:
-    """Top-level worker for parallel Monte Carlo (must be picklable)."""
-    cfg = to_dict(config)
-    return run_trajectory(cfg, seed=seed, max_steps=max_steps)
+    """Top-level worker for parallel Monte Carlo (must be picklable).
+
+    v0.2: Pass original ConfigLike (Pydantic model or dict) directly downstream.
+    """
+    return run_trajectory(config, seed=seed, max_steps=max_steps)
 
 
 def value_at_risk(losses: list[float], confidence: float) -> float:
@@ -77,13 +79,26 @@ def run_monte_carlo(
     ci_boot: int = 2000,
     n_jobs: int | None = None,
 ) -> dict[str, Any]:
-    """Run Monte Carlo simulation (parallelized) and return enriched ruin-risk statistics."""
-    cfg = to_dict(config)
-    risk_config = cfg.get("risk", {})
-    simulation = cfg["simulation"]
-    n_paths = int(paths or risk_config.get("monte_carlo_paths", 1000))
-    level = float(confidence or risk_config.get("confidence_level", 0.95))
-    base_seed = int(simulation.get("seed", 42))
+    """Run Monte Carlo simulation (parallelized) and return enriched ruin-risk statistics.
+
+    v0.2: Prefers direct Pydantic attributes when RuinConfig is passed.
+    """
+    # v0.2: prefer Pydantic attributes
+    if isinstance(config, RuinConfig):
+        risk_cfg = config.risk
+        sim = config.simulation
+
+        n_paths = int(paths or getattr(risk_cfg, "monte_carlo_paths", 1000))
+        level = float(confidence or getattr(risk_cfg, "confidence_level", 0.95))
+        base_seed = int(getattr(sim, "seed", 42))
+    else:
+        cfg = to_dict(config)
+        risk_config = cfg.get("risk", {})
+        simulation = cfg["simulation"]
+
+        n_paths = int(paths or risk_config.get("monte_carlo_paths", 1000))
+        level = float(confidence or risk_config.get("confidence_level", 0.95))
+        base_seed = int(simulation.get("seed", 42))
 
     # Determine parallelism - use all available cores by default
     cpu = os.cpu_count() or 4
@@ -98,6 +113,7 @@ def run_monte_carlo(
             executor.submit(_run_one_path, config, base_seed + i, max_steps): i
             for i in range(n_paths)
         }
+
         for future in as_completed(futures):
             results.append(future.result())
 
