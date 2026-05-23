@@ -83,3 +83,13 @@ def load_ruin_config(path: str | Path) -> RuinConfigRoot:
     """
     raw = load_config(path)
     return RuinConfigRoot.model_validate(raw)
+
+
+def to_dict(config: dict[str, Any] | RuinConfigRoot) -> dict[str, Any]:
+    """Normalize either a legacy dict or RuinConfig Pydantic model to plain dict.
+
+    This is the safe bridge during the v0.2 migration to full typed configs.
+    """
+    if hasattr(config, "model_dump"):
+        return config.model_dump()
+    return config  # already a dict

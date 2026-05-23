@@ -12,12 +12,14 @@ from typing import Any
 
 import numpy as np
 
+from ruin.config import to_dict
 from ruin.simulation.agent_based import run_trajectory
 
 
-def _run_one_path(config: dict[str, Any], seed: int, max_steps: int | None) -> dict[str, Any]:
+def _run_one_path(config: dict[str, Any] | Any, seed: int, max_steps: int | None) -> dict[str, Any]:
     """Top-level worker for parallel Monte Carlo (must be picklable)."""
-    return run_trajectory(config, seed=seed, max_steps=max_steps)
+    cfg = to_dict(config)
+    return run_trajectory(cfg, seed=seed, max_steps=max_steps)
 
 
 def value_at_risk(losses: list[float], confidence: float) -> float:
@@ -64,7 +66,7 @@ def bootstrap_ci(
 
 
 def run_monte_carlo(
-    config: dict[str, Any],
+    config: dict[str, Any] | Any,
     paths: int | None = None,
     confidence: float | None = None,
     max_steps: int | None = None,
@@ -72,8 +74,9 @@ def run_monte_carlo(
     n_jobs: int | None = None,
 ) -> dict[str, Any]:
     """Run Monte Carlo simulation (parallelized) and return enriched ruin-risk statistics."""
-    risk_config = config.get("risk", {})
-    simulation = config["simulation"]
+    cfg = to_dict(config)
+    risk_config = cfg.get("risk", {})
+    simulation = cfg["simulation"]
     n_paths = int(paths or risk_config.get("monte_carlo_paths", 1000))
     level = float(confidence or risk_config.get("confidence_level", 0.95))
     base_seed = int(simulation.get("seed", 42))
@@ -88,7 +91,7 @@ def run_monte_carlo(
     results: list[dict[str, Any]] = []
     with ProcessPoolExecutor(max_workers=n_jobs) as executor:
         futures = {
-            executor.submit(_run_one_path, config, base_seed + i, max_steps): i
+            executor.submit(_run_one_path, cfg, base_seed + i, max_steps): i
             for i in range(n_paths)
         }
         for future in as_completed(futures):

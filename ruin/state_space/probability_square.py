@@ -5,6 +5,7 @@ from typing import Any
 
 import numpy as np
 
+from ruin.config import to_dict
 from ruin.core.processes import batch_qdot_travel_step, make_rng, sample_shock_arrivals
 from ruin.core.qdot import QDot, QDotType
 from ruin.metrics.pressure import (
@@ -19,10 +20,12 @@ from ruin.state_space.disruption_field import DisruptionField
 
 
 class ProbabilitySquare:
-    def __init__(self, config: dict[str, Any], rng: Random, store_field_snapshots: bool = False) -> None:
-        simulation = config["simulation"]
-        square = config["probability_square"]
-        field_config = config["disruption_field"]
+    def __init__(self, config: dict[str, Any] | Any, rng: Random, store_field_snapshots: bool = False) -> None:
+        cfg = to_dict(config)  # support both dict and RuinConfig Pydantic models
+
+        simulation = cfg["simulation"]
+        square = cfg["probability_square"]
+        field_config = cfg["disruption_field"]
 
         self.width = int(simulation["grid_width"])
         self.height = int(simulation["grid_height"])
@@ -62,7 +65,7 @@ class ProbabilitySquare:
             self.np_rng,
         )
 
-        qdots_cfg = config.get("qdots", {})
+        qdots_cfg = cfg.get("qdots", {})
         self.qdots: list[QDot] = []
         qid = 0
         for qtype, count in [
@@ -94,10 +97,11 @@ class ProbabilitySquare:
                 qid += 1
         self.initial_qdots = len(self.qdots)
 
-    def step(self, config: dict[str, Any], system_ruined: bool = False) -> dict[str, Any]:
+    def step(self, config: dict[str, Any] | Any, system_ruined: bool = False) -> dict[str, Any]:
+        cfg = to_dict(config)
         self.time += 1
-        processes = config.get("processes", {})
-        field_cfg = config.get("disruption_field", {})
+        processes = cfg.get("processes", {})
+        field_cfg = cfg.get("disruption_field", {})
 
         # v0.2 vectorized shock arrivals (using 1D sampler + reshape)
         n_cells = self.width * self.height
