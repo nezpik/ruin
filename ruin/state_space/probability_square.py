@@ -26,13 +26,18 @@ ConfigLike = Union[dict[str, Any], RuinConfig]
 class ProbabilitySquare:
     def __init__(self, config: ConfigLike, rng: Random, store_field_snapshots: bool = False) -> None:
         cfg = to_dict(config)  # support both dict and RuinConfig Pydantic models
+        self._raw_config: ConfigLike = config  # keep original for typed access during v0.2 migration
 
-        simulation = cfg["simulation"]
-        square = cfg["probability_square"]
-        field_config = cfg["disruption_field"]
+        # v0.2: prefer Pydantic attributes when a validated RuinConfig is passed
+        if isinstance(config, RuinConfig):
+            sim = config.simulation
+            self.width = int(sim.grid_width)
+            self.height = int(sim.grid_height)
+        else:
+            simulation = cfg["simulation"]
+            self.width = int(simulation["grid_width"])
+            self.height = int(simulation["grid_height"])
 
-        self.width = int(simulation["grid_width"])
-        self.height = int(simulation["grid_height"])
         self.rng = rng
 
         # v0.2: independent NumPy RNG for vectorized sampling
@@ -47,24 +52,50 @@ class ProbabilitySquare:
         self.np_rng = make_rng(seed)
 
         self.time = 0
-        self.d_state = DState(str(square.get("initial_d_state", "stable")).upper())
+
+        # v0.2: extract sections with Pydantic attribute preference
+        if isinstance(self._raw_config, RuinConfig):
+            square_cfg = self._raw_config.probability_square
+            field_cfg = self._raw_config.disruption_field
+            self.d_state = DState(str(getattr(square_cfg, "initial_d_state", "stable")).upper())
+            # Normalize to dict so .get() works in choose_d_state call
+            d_thresh = getattr(square_cfg, "d_state_thresholds", None)
+            self.thresholds = d_thresh.model_dump() if d_thresh is not None else {}
+            self.qdot_feedback_weight = float(getattr(square_cfg, "qdot_feedback_weight", 0.5))
+
+            mem_w = float(getattr(field_cfg, "memory_weight", 0.85))
+            prop_r = int(getattr(field_cfg, "propagation_radius", 2))
+            prop_d = float(getattr(field_cfg, "propagation_decay", 0.55))
+            temp_d = float(getattr(field_cfg, "temporal_decay", 0.12))
+            rec_r = float(getattr(field_cfg, "recovery_rate", 0.08))
+        else:
+            square = cfg["probability_square"]
+            field_config = cfg["disruption_field"]
+            self.d_state = DState(str(square.get("initial_d_state", "stable")).upper())
+            self.thresholds = square.get("d_state_thresholds", {})
+            self.qdot_feedback_weight = float(square.get("qdot_feedback_weight", 0.5))
+
+            mem_w = float(field_config.get("memory_weight", 0.85))
+            prop_r = int(field_config.get("propagation_radius", 2))
+            prop_d = float(field_config.get("propagation_decay", 0.55))
+            temp_d = float(field_config.get("temporal_decay", 0.12))
+            rec_r = float(field_config.get("recovery_rate", 0.08))
+
         self.previous_chaos_pressure = 0.0
         self.global_chaos_pressure = 0.0
         self.global_order_pressure = 0.0
         self.snapshots: list[dict[str, Any]] = []
-        self.thresholds = square.get("d_state_thresholds", {})
-        self.qdot_feedback_weight = float(square.get("qdot_feedback_weight", 0.5))
         self.max_capacity = self.width * self.height
         self.store_field_snapshots = store_field_snapshots
 
         self.field = DisruptionField(
             self.width,
             self.height,
-            float(field_config.get("memory_weight", 0.85)),
-            int(field_config.get("propagation_radius", 2)),
-            float(field_config.get("propagation_decay", 0.55)),
-            float(field_config.get("temporal_decay", 0.12)),
-            float(field_config.get("recovery_rate", 0.08)),
+            mem_w,
+            prop_r,
+            prop_d,
+            temp_d,
+            rec_r,
             self.rng,
             self.np_rng,
         )
@@ -104,15 +135,32 @@ class ProbabilitySquare:
     def step(self, config: ConfigLike, system_ruined: bool = False) -> dict[str, Any]:
         cfg = to_dict(config)
         self.time += 1
-        processes = cfg.get("processes", {})
-        field_cfg = cfg.get("disruption_field", {})
+
+        # v0.2: prefer direct Pydantic attributes when available
+        if isinstance(self._raw_config, RuinConfig):
+            proc = self._raw_config.processes
+            field = self._raw_config.disruption_field
+            shock_rate = float(getattr(field, "shock_arrival_rate", 0.05))
+            shock_mean = float(getattr(field, "mean_initial_intensity", 1.0))
+            jump_rate = float(getattr(proc, "jump_intensity", 0.08))
+            jump_mean = float(getattr(proc, "jump_mean_size", 3.0))
+            travel_drift = float(getattr(proc, "travel_drift", 1.2))
+            travel_vol = float(getattr(proc, "travel_volatility", 0.4))
+        else:
+            processes = cfg.get("processes", {})
+            field_cfg = cfg.get("disruption_field", {})
+            shock_rate = float(field_cfg.get("shock_arrival_rate", 0.05))
+            shock_mean = float(field_cfg.get("shock_mean_intensity", 1.0))
+            jump_rate = float(processes.get("jump_intensity", 0.08))
+            jump_mean = float(processes.get("jump_mean_size", 3.0))
+            travel_drift = float(processes.get("travel_drift", 1.2))
+            travel_vol = float(processes.get("travel_volatility", 0.4))
 
         # v0.2 vectorized shock arrivals (using 1D sampler + reshape)
         n_cells = self.width * self.height
-        rate = float(field_cfg.get("shock_arrival_rate", 0.05))
         shock_mask_1d = sample_shock_arrivals(
             n_cells,
-            rate,
+            shock_rate,
             dt=1.0,
             rng=self.np_rng,
         )
@@ -121,15 +169,12 @@ class ProbabilitySquare:
         for y in range(self.height):
             for x in range(self.width):
                 if shock_mask[y, x]:
-                    intensity = float(
-                        self.np_rng.exponential(field_cfg.get("shock_mean_intensity", 1.0))
-                    )
+                    intensity = float(self.np_rng.exponential(shock_mean))
                     self.field.inject(x, y, intensity)
 
         self.field.step()
 
         # Jump-driven shocks (also vectorized)
-        jump_rate = float(processes.get("jump_intensity", 0.08))
         jump_mask_1d = sample_shock_arrivals(
             n_cells,
             jump_rate,
@@ -141,7 +186,7 @@ class ProbabilitySquare:
         for y in range(self.height):
             for x in range(self.width):
                 if jump_mask[y, x]:
-                    intensity = float(self.np_rng.exponential(processes.get("jump_mean_size", 3.0)))
+                    intensity = float(self.np_rng.exponential(jump_mean))
                     self.field.inject(x, y, intensity * 0.6)
 
         penalty = 0.0
@@ -161,12 +206,9 @@ class ProbabilitySquare:
             drift_m = np.array([q.drift_multiplier for q in active_qdots], dtype=float)
             vol_m = np.array([q.volatility_multiplier for q in active_qdots], dtype=float)
 
-            base_drift = float(processes.get("travel_drift", 1.2))
-            base_vol = float(processes.get("travel_volatility", 0.4))
-
             new_xs, new_ys, new_tws, raw_penalties, late_mask = batch_qdot_travel_step(
                 xs, ys, tws, exposures, drift_m, vol_m,
-                base_drift, base_vol, self.width, self.height, self.np_rng
+                travel_drift, travel_vol, self.width, self.height, self.np_rng
             )
 
             # Write back + accumulate scaled penalties + track movement/ruin
