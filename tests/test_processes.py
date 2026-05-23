@@ -71,16 +71,24 @@ def test_legacy_classes_still_work():
     assert isinstance(jump, float)
 
 
-def test_processes_with_small_config_fixture(small_ruin_config):
-    """Smoke that the new primitives can be called with realistic parameters from a config."""
+def test_processes_with_typed_small_ruin_config(small_ruin_config):
+    """v0.2: Smoke that vectorized primitives work with direct RuinConfig attributes (no dict conversion)."""
     cfg = small_ruin_config
+
+    # Direct Pydantic attribute access (preferred path)
     p = cfg.processes
+    sim = cfg.simulation
+    dfield = cfg.disruption_field
 
     rng = make_rng(42)
     disp = sample_gbm_displacements(10, p.travel_drift, p.travel_volatility, dt=1.0, rng=rng)
     jumps = sample_compound_poisson_jumps(
         10, p.jump_intensity, p.jump_mean_size, dt=1.0, rng=rng
     )
+
+    # Also exercise another section to prove full typed access
+    assert sim.grid_width == 8
+    assert dfield.shock_arrival_rate == 0.04
 
     assert len(disp) == 10
     assert len(jumps) == 10
