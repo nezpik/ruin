@@ -48,9 +48,11 @@ def test_small_config_runs(small_config):
 
 
 def test_small_ruin_config_runs(small_ruin_config):
-    """Typed small config must also drive a trajectory."""
-    result = run_trajectory(small_ruin_config.model_dump(), seed=123, max_steps=15)
+    """Typed small config must also drive a trajectory (pass RuinConfig directly)."""
+    # v0.2: now pass the model object directly — run_trajectory accepts ConfigLike
+    result = run_trajectory(small_ruin_config, seed=123, max_steps=15)
     assert "ruined" in result
+    assert "final_d_state" in result
 
 
 def test_qdot_step_basic():
