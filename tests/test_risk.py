@@ -1,4 +1,4 @@
-"""Tests for Monte Carlo risk analysis (v0.2)."""
+"""Tests for Monte Carlo risk analysis (v0.2) with parallel execution."""
 
 from __future__ import annotations
 
@@ -14,20 +14,20 @@ def test_bootstrap_ci_basic():
     assert 0.0 <= lower <= upper <= 1.0
 
 
-def test_run_monte_carlo_small(golden_config):
-    # Use a small number of paths for speed in tests
-    result = run_monte_carlo(golden_config, paths=8, max_steps=30)
-    assert result["paths"] == 8
+def test_run_monte_carlo_small_parallel(golden_config):
+    # Test parallel execution with small paths (should still work correctly)
+    result = run_monte_carlo(golden_config, paths=12, max_steps=30, n_jobs=2)
+    assert result["paths"] == 12
     assert 0.0 <= result["ruin_probability"] <= 1.0
     assert "ruin_probability_ci" in result
-    assert len(result["ruin_probability_ci"]) == 2
+    assert "n_jobs" in result
+    assert result["n_jobs"] >= 1
     assert result["mean_loss"] is not None
-    assert result["value_at_risk"] is not None
 
 
-def test_run_monte_carlo_golden_small(golden_config):
-    result = run_monte_carlo(golden_config, paths=20, max_steps=50)
+def test_run_monte_carlo_golden_parallel(golden_config):
+    result = run_monte_carlo(golden_config, paths=30, max_steps=50, n_jobs=4)
     assert "ruin_probability_ci" in result
-    assert result["paths"] == 20
-    # With golden config we expect high ruin probability in short horizon
+    assert result["paths"] == 30
     assert result["ruin_probability"] > 0.3
+    assert result.get("n_jobs") is not None

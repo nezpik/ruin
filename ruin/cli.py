@@ -27,6 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
     risk.add_argument("--paths", type=int, default=None)
     risk.add_argument("--confidence", type=float, default=None)
     risk.add_argument("--max-steps", type=int, default=None)
+    risk.add_argument("--jobs", type=int, default=None, help="Number of parallel workers (default: auto)")
 
     return parser
 
@@ -59,7 +60,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "risk":
-        result = run_monte_carlo(config, paths=args.paths, confidence=args.confidence, max_steps=args.max_steps)
+        result = run_monte_carlo(
+            config,
+            paths=args.paths,
+            confidence=args.confidence,
+            max_steps=args.max_steps,
+            n_jobs=args.jobs,
+        )
         print(json.dumps(result, indent=2))
         return 0
 

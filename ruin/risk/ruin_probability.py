@@ -1,16 +1,23 @@
 """RUIN risk analysis (v0.2).
 
-Monte Carlo ruin probability estimation with improved statistics.
+Monte Carlo ruin probability estimation with improved statistics and parallel execution.
 """
 
 from __future__ import annotations
 
+import os
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from statistics import mean, stdev
 from typing import Any
 
 import numpy as np
 
 from ruin.simulation.agent_based import run_trajectory
+
+
+def _run_one_path(config: dict[str, Any], seed: int, max_steps: int | None) -> dict[str, Any]:
+    """Top-level worker for parallel Monte Carlo (must be picklable)."""
+    return run_trajectory(config, seed=seed, max_steps=max_steps)
 
 
 def value_at_risk(losses: list[float], confidence: float) -> float:
@@ -62,18 +69,30 @@ def run_monte_carlo(
     confidence: float | None = None,
     max_steps: int | None = None,
     ci_boot: int = 2000,
+    n_jobs: int | None = None,
 ) -> dict[str, Any]:
-    """Run Monte Carlo simulation and return enriched ruin-risk statistics."""
+    """Run Monte Carlo simulation (parallelized) and return enriched ruin-risk statistics."""
     risk_config = config.get("risk", {})
     simulation = config["simulation"]
     n_paths = int(paths or risk_config.get("monte_carlo_paths", 1000))
     level = float(confidence or risk_config.get("confidence_level", 0.95))
     base_seed = int(simulation.get("seed", 42))
 
-    results = [
-        run_trajectory(config, seed=base_seed + i, max_steps=max_steps)
-        for i in range(n_paths)
-    ]
+    # Determine parallelism - use all available cores by default
+    cpu = os.cpu_count() or 4
+    if n_jobs is None:
+        n_jobs = min(cpu, n_paths)
+    n_jobs = max(1, min(n_jobs, n_paths))
+
+    # Parallel execution
+    results: list[dict[str, Any]] = []
+    with ProcessPoolExecutor(max_workers=n_jobs) as executor:
+        futures = {
+            executor.submit(_run_one_path, config, base_seed + i, max_steps): i
+            for i in range(n_paths)
+        }
+        for future in as_completed(futures):
+            results.append(future.result())
 
     losses = [float(result["cumulative_loss"]) for result in results]
     ruined = [result for result in results if result["ruined"]]
@@ -102,4 +121,5 @@ def run_monte_carlo(
         "time_to_ruin": ruin_times[:100],  # cap for output size
         "mean_time_to_ruin": round(mean_time, 2) if mean_time is not None else None,
         "confidence_level": level,
+        "n_jobs": n_jobs,
     }
