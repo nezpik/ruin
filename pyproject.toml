@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ruin"
-version = "0.2.0-dev"
+version = "0.2.0"
 description = "Destiny-framed ruin risk for stochastic logistics flow."
 readme = "README.md"
 requires-python = ">=3.11,<3.15"
