@@ -15,3 +15,12 @@ dist/
 .coverage
 htmlcov/
 ruin_frames.txt
+
+# uv
+uv.lock
+
+# IDE / editors
+.idea/
+.vscode/
+*.swp
+*~

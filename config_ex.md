@@ -1,5 +1,7 @@
 ﻿# RUIN v0.1 Example Configuration
 
+**Note (v0.2):** The authoritative configuration is defined in `ruin/config_models.py` (Pydantic). The YAML below is illustrative only.
+
 This file describes the intended `examples/urban_ruin_shift.yaml` configuration shape for the first implementation.
 
 ```yaml

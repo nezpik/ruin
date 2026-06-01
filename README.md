@@ -48,11 +48,17 @@ See [CHANGELOG.md](CHANGELOG.md) for the full detailed list of v0.2 Foundation H
 
 ## Quickstart
 
-### Install
+### Install (with uv — recommended)
 
 ```bash
 git clone https://github.com/nezpik/ruin.git
 cd ruin
+uv sync --dev
+```
+
+Alternatively (classic pip):
+
+```bash
 python -m pip install -e ".[test]"
 ```
 
@@ -61,7 +67,7 @@ Requires Python ≥ 3.11. Core dependencies: `numpy`, `pydantic`, `matplotlib`.
 ### Run One Visible Trajectory + GIF
 
 ```bash
-ruin simulate --config examples/urban_ruin_shift.yaml --max-steps 40 --visualize --output /tmp/ruin_shift.txt
+uv run ruin simulate --config examples/urban_ruin_shift.yaml --max-steps 40 --visualize --output /tmp/ruin_shift.txt
 ```
 
 This produces:
@@ -71,7 +77,7 @@ This produces:
 ### Run Monte Carlo Risk Analysis (Parallel)
 
 ```bash
-ruin risk --config examples/urban_ruin_shift.yaml --paths 200 --max-steps 50 --jobs 4
+uv run ruin risk --config examples/urban_ruin_shift.yaml --paths 200 --max-steps 50 --jobs 4
 ```
 
 Example output (truncated):
