@@ -25,7 +25,7 @@ def run_trajectory(
         effective_seed = seed if seed is not None else getattr(sim, "seed", 42)
         horizon = int(max_steps or getattr(sim, "shift_duration", 480))
 
-        square = ProbabilitySquare(config, Random(int(effective_seed)), store_field_snapshots=store_field_snapshots)
+        square = ProbabilitySquare(config, int(effective_seed), store_field_snapshots=store_field_snapshots)
 
         network = NetworkSurplus(
             initial_buffer=float(ruin_cfg.initial_buffer),
@@ -40,8 +40,7 @@ def run_trajectory(
         effective_seed = seed if seed is not None else simulation.get("seed", 42)
         horizon = int(max_steps or simulation.get("shift_duration", 480))
 
-        rng = Random(int(effective_seed))
-        square = ProbabilitySquare(config, rng, store_field_snapshots=store_field_snapshots)
+        square = ProbabilitySquare(config, int(effective_seed), store_field_snapshots=store_field_snapshots)
 
         network = NetworkSurplus(
             initial_buffer=float(ruin_config["initial_buffer"]),

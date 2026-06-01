@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 import json
 import logging
 from pathlib import Path
@@ -42,7 +43,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout)
 
     # Prefer validated Pydantic config (v0.2) — pass the model directly now that functions accept it
     try:

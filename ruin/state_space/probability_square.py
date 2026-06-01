@@ -24,8 +24,13 @@ ConfigLike = Union[dict[str, Any], RuinConfig]
 
 
 class ProbabilitySquare:
-    def __init__(self, config: ConfigLike, rng: Random, store_field_snapshots: bool = False) -> None:
-        self._raw_config: ConfigLike = config  # keep original for typed access during v0.2 migration
+    def __init__(
+        self,
+        config: ConfigLike,
+        rng: Random | int,
+        store_field_snapshots: bool = False,
+    ) -> None:
+        self._raw_config: ConfigLike = config
 
         # v0.2: prefer Pydantic attributes when a validated RuinConfig is passed
         if isinstance(config, RuinConfig):
@@ -38,18 +43,22 @@ class ProbabilitySquare:
             self.width = int(simulation["grid_width"])
             self.height = int(simulation["grid_height"])
 
-        self.rng = rng
-
-        # v0.2: independent NumPy RNG for vectorized sampling
-        seed = 42
-        try:
-            if hasattr(rng, "getstate"):
+        # FIX: accept either Random instance (legacy) or direct int seed for true reproducibility
+        if isinstance(rng, int):
+            self.rng: Random = Random(rng)
+            self.np_rng: np.random.Generator = make_rng(rng)
+        else:
+            self.rng = rng
+            # fallback derivation (kept for backward compatibility)
+            try:
                 state = rng.getstate()
                 if isinstance(state, tuple) and len(state) > 1:
                     seed = abs(hash(str(state[1]))) % (2**31)
-        except Exception:
-            seed = 42
-        self.np_rng = make_rng(seed)
+                else:
+                    seed = 42
+            except Exception:
+                seed = 42
+            self.np_rng = make_rng(seed)
 
         self.time = 0
 
