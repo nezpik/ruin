@@ -64,10 +64,10 @@ def bootstrap_ci(
         sample = rng.choice(arr, size=n, replace=True)
         boot_means.append(float(np.mean(sample)))
 
-    boot_means = np.array(boot_means)
+    boot_arr = np.array(boot_means)
     alpha = (1.0 - confidence) / 2
-    lower = float(np.percentile(boot_means, 100 * alpha))
-    upper = float(np.percentile(boot_means, 100 * (1 - alpha)))
+    lower = float(np.percentile(boot_arr, 100 * alpha))
+    upper = float(np.percentile(boot_arr, 100 * (1 - alpha)))
     return lower, upper
 
 
@@ -88,16 +88,16 @@ def run_monte_carlo(
         risk_cfg = config.risk
         sim = config.simulation
 
-        n_paths = int(paths or getattr(risk_cfg, "monte_carlo_paths", 1000))
-        level = float(confidence or getattr(risk_cfg, "confidence_level", 0.95))
-        base_seed = int(getattr(sim, "seed", 42))
+        n_paths = int(paths if paths is not None else risk_cfg.monte_carlo_paths)
+        level = float(confidence if confidence is not None else risk_cfg.confidence_level)
+        base_seed = int(sim.seed)
     else:
         cfg = to_dict(config)
         risk_config = cfg.get("risk", {})
         simulation = cfg["simulation"]
 
-        n_paths = int(paths or risk_config.get("monte_carlo_paths", 1000))
-        level = float(confidence or risk_config.get("confidence_level", 0.95))
+        n_paths = int(paths if paths is not None else risk_config.get("monte_carlo_paths", 1000))
+        level = float(confidence if confidence is not None else risk_config.get("confidence_level", 0.95))
         base_seed = int(simulation.get("seed", 42))
 
     # Determine parallelism - use all available cores by default

@@ -8,6 +8,7 @@ All sampling is reproducible via np.random.Generator.
 
 from __future__ import annotations
 
+import math
 from random import Random
 from typing import Optional
 
@@ -49,9 +50,9 @@ def sample_gbm_displacements(
     """
     rng = rng or make_rng()
     # Standard Wiener increment: N(0, sqrt(dt))
-    z = rng.standard_normal(n)
+    z: np.ndarray = rng.standard_normal(n)
     # GBM-style: mu*dt + sigma*sqrt(dt)*Z
-    return drift * dt + volatility * np.sqrt(dt) * z
+    return drift * dt + volatility * math.sqrt(dt) * z
 
 
 def sample_compound_poisson_jumps(
@@ -169,7 +170,6 @@ def batch_qdot_travel_step(
     # Late / ruined logic
     late_mask = new_time <= 0
     penalties = np.zeros(n, dtype=float)
-    newly_ruined = late_mask & ~np.zeros(n, dtype=bool)  # placeholder; caller will handle
 
     # Penalty only on newly ruined this step
     # We compute penalty using the current (pre-step) exposure for simplicity
@@ -231,9 +231,9 @@ def sample_travel_step(
 ) -> float:
     """Scalar helper used by QDot / agent loop during transition."""
     py_rng = rng or make_py_rng()
-    # GBM component
+    # GBM component — use math.sqrt so the result stays a plain Python float.
     z = py_rng.gauss(0.0, 1.0)
-    gbm = drift * dt + volatility * np.sqrt(dt) * z
+    gbm = drift * dt + volatility * math.sqrt(dt) * z
     # Jump component
     jump = 0.0
     if py_rng.random() < jump_intensity:

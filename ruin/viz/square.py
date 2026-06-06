@@ -111,7 +111,7 @@ def animate_probability_square(
     pressure_text = ax.text(0.02, 0.02, "", transform=ax.transAxes, color="#88ff88",
                             fontsize=9, va="bottom", fontfamily="monospace")
 
-    def init():
+    def init() -> tuple[Any, ...]:
         scatter.set_offsets(np.empty((0, 2)))
         scatter.set_array(np.array([]))
         time_text.set_text("")
@@ -120,7 +120,7 @@ def animate_probability_square(
         field_img.set_data(np.zeros((height, width)))
         return field_img, scatter, time_text, state_text, pressure_text
 
-    def update(frame_idx: int):
+    def update(frame_idx: int) -> tuple[Any, ...]:
         snap = snapshots[frame_idx]
         t = snap["time"]
         d_state = snap["d_state"]
@@ -163,7 +163,7 @@ def animate_probability_square(
                         colors.append("white")
             scatter.set_offsets(list(zip(xs, ys)))
             scatter.set_array(np.array([]))
-            scatter.set_facecolors(colors)
+            scatter.set_facecolor(colors)  # set_facecolors exists at runtime but not in stubs
         else:
             scatter.set_offsets(np.empty((0, 2)))
 

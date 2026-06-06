@@ -315,7 +315,7 @@ class ProbabilitySquare:
         return snapshot
 
     def snapshot(self, penalty: float, late_count: int, active_count: int) -> dict[str, Any]:
-        snap = {
+        snap: dict[str, Any] = {
             "time": self.time,
             "d_state": self.d_state.value,
             "chaos_pressure": round(self.global_chaos_pressure, 6),

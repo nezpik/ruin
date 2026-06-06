@@ -16,6 +16,10 @@ from ruin.viz.square import save_text_frames, save_field_gif
 
 logger = logging.getLogger("ruin.cli")
 
+# Codex `ReasoningEffort` levels, low → high — accepted as plain strings and
+# forwarded to the SDK, which validates and coerces them itself.
+EXPLAIN_EFFORT_CHOICES = ["none", "minimal", "low", "medium", "high", "xhigh"]
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="ruin", description="RUIN: destiny-framed ruin risk for logistics flow")
@@ -28,6 +32,18 @@ def build_parser() -> argparse.ArgumentParser:
     simulate.add_argument("--output", default="ruin_frames.txt")
     simulate.add_argument("--json", action="store_true")
     simulate.add_argument("--visualize", action="store_true", help="Generate animated GIF of the real disruption field + Q-dots")
+    simulate.add_argument(
+        "--explain",
+        metavar="PATH",
+        default=None,
+        help="Write an AI-narrated markdown research report to PATH via Codex (requires the 'ai' extra: pip install 'ruin[ai]')",
+    )
+    simulate.add_argument(
+        "--explain-effort",
+        choices=EXPLAIN_EFFORT_CHOICES,
+        default=None,
+        help="Codex reasoning effort for --explain — trade narrative depth for speed/cost (default: Codex's own default)",
+    )
 
     risk = subparsers.add_parser("risk", help="Run Monte Carlo ruin-risk estimation")
     risk.add_argument("--config", required=True)
@@ -35,8 +51,41 @@ def build_parser() -> argparse.ArgumentParser:
     risk.add_argument("--confidence", type=float, default=None)
     risk.add_argument("--max-steps", type=int, default=None)
     risk.add_argument("--jobs", type=int, default=None, help="Number of parallel workers (default: auto)")
+    risk.add_argument(
+        "--explain",
+        metavar="PATH",
+        default=None,
+        help="Write an AI-narrated markdown research report to PATH via Codex (requires the 'ai' extra: pip install 'ruin[ai]')",
+    )
+    risk.add_argument(
+        "--explain-effort",
+        choices=EXPLAIN_EFFORT_CHOICES,
+        default=None,
+        help="Codex reasoning effort for --explain — trade narrative depth for speed/cost (default: Codex's own default)",
+    )
 
     return parser
+
+
+def _maybe_explain(
+    result: dict[str, Any],
+    config: RuinConfig | dict[str, Any],
+    explain_path: str | None,
+    effort: str | None = None,
+) -> None:
+    if explain_path is None:
+        return
+    from ruin.ai.narrator import generate_report
+
+    try:
+        out = generate_report(result, config, output_path=explain_path, effort=effort)
+    except ImportError as exc:
+        logger.error("Skipping --explain: %s", exc)
+        return
+    except Exception as exc:
+        logger.warning("--explain failed and will be skipped (simulation output is unaffected): %s", exc)
+        return
+    logger.info("AI report written to %s", out)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -72,6 +121,7 @@ def main(argv: list[str] | None = None) -> int:
             "frames_written": args.output,
         }
         logger.info(json.dumps(summary if not args.json else result, indent=2))
+        _maybe_explain(result, config, args.explain, effort=args.explain_effort)
         return 0
 
     if args.command == "risk":
@@ -83,6 +133,7 @@ def main(argv: list[str] | None = None) -> int:
             n_jobs=args.jobs,
         )
         logger.info(json.dumps(result, indent=2))
+        _maybe_explain(result, config, args.explain, effort=args.explain_effort)
         return 0
 
     return 1
