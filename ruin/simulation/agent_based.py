@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from random import Random
 from typing import Any, Union
 
 from ruin.config import to_dict
@@ -22,16 +21,16 @@ def run_trajectory(
     if isinstance(config, RuinConfig):
         sim = config.simulation
         ruin_cfg = config.ruin
-        effective_seed = seed if seed is not None else getattr(sim, "seed", 42)
-        horizon = int(max_steps or getattr(sim, "shift_duration", 480))
+        effective_seed = seed if seed is not None else sim.seed
+        horizon = int(max_steps if max_steps is not None else sim.shift_duration)
 
-        square = ProbabilitySquare(config, int(effective_seed), store_field_snapshots=store_field_snapshots)
+        square = ProbabilitySquare(config, effective_seed, store_field_snapshots=store_field_snapshots)
 
         network = NetworkSurplus(
             initial_buffer=float(ruin_cfg.initial_buffer),
-            barrier=float(getattr(ruin_cfg, "barrier", 0.0)),
-            sla_threshold=float(getattr(ruin_cfg, "sla_threshold", 0.12)),
-            recovery_rate=float(getattr(ruin_cfg, "recovery_rate", 0.0)),
+            barrier=float(ruin_cfg.barrier),
+            sla_threshold=float(ruin_cfg.sla_threshold),
+            recovery_rate=float(ruin_cfg.recovery_rate),
         )
     else:
         cfg = to_dict(config)
