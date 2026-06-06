@@ -4,7 +4,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.11--3.14-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![v0.2 Foundation](https://img.shields.io/badge/Version-v0.2%20Foundation-green.svg)](https://github.com/nezpik/ruin)
+[![v0.3.0](https://img.shields.io/badge/Version-v0.3.0-green.svg)](https://github.com/nezpik/ruin)
 
 RUIN is a research-grade framework for measuring when physical logistics systems run out of destiny. It translates quantitative finance concepts (ruin theory, jump-diffusion, Monte Carlo paths, VaR, Expected Shortfall, bootstrap confidence intervals) into a logistics language built around **physical uncertainty**, **service failure**, and **systemic collapse**.
 
@@ -167,7 +167,7 @@ Full definitions and deeper philosophy are in `RUIN.md`.
 
 ---
 
-## Current Architecture (v0.2)
+## Current Architecture (v0.3.0)
 
 ```
 ruin/
@@ -194,7 +194,7 @@ ruin/
 
 ---
 
-## What v0.2 Is
+## What RUIN Is
 
 - A **research instrument** for studying logistics ruin under bounded destiny
 - A **visual + quantitative** tool for disruption propagation and order pressure
@@ -203,7 +203,7 @@ ruin/
 
 ---
 
-## What v0.2 Is Not (Yet)
+## What RUIN Is Not (Yet)
 
 - A GIS / real-road simulator
 - A vehicle routing optimizer
@@ -214,13 +214,14 @@ These are explicitly deferred until the abstract mechanics are solid and reprodu
 
 ---
 
-## Roadmap (Post-v0.2)
+## Roadmap
 
-**Foundation complete.** The following are now production-grade in v0.2:
+**Production-grade as of v0.3.0:**
 - Typed Pydantic configuration with direct attribute access
 - Vectorized NumPy primitives + batch Q-dot movement
 - Real-field visualization with animated GIFs
 - Parallel Monte Carlo with bootstrap confidence intervals
+- Optional Codex AI research-report narration (`--explain`, `--explain-effort`)
 
 **Post-review fixes (Devin PR #1):** Critical regressions in pressure calculations (`active_by_cell`) and `qdot_exposure_multiplier` handling were identified during external review and have been corrected with dedicated regression tests.
 
@@ -256,7 +257,7 @@ If you use RUIN, its concepts, terminology, code, or experimental outputs in aca
 
 Suggested citation:
 
-> Zouiti, Naji. RUIN: Ruin-probability Unified In Networks. v0.2 Foundation, 2026.  
+> Zouiti, Naji. RUIN: Ruin-probability Unified In Networks. v0.3.0, 2026.  
 > GitHub: https://github.com/nezpik/ruin
 
 BibTeX:
@@ -266,7 +267,7 @@ BibTeX:
   author = {Zouiti, Naji},
   title = {RUIN: Ruin-probability Unified In Networks},
   year = {2026},
-  version = {0.2.0-dev},
+  version = {0.3.0},
   url = {https://github.com/nezpik/ruin}
 }
 ```
