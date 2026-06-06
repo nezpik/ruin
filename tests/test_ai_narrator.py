@@ -89,7 +89,7 @@ def test_build_config_summary_typed(small_ruin_config):
 
 
 def test_build_trajectory_prompt_uses_vocabulary_and_compresses_data(small_config, trajectory_result):
-    prompt = _build_trajectory_prompt(trajectory_result, small_config)
+    prompt = _build_trajectory_prompt(_build_trajectory_facts(trajectory_result, small_config))
 
     # Grounded in RUIN's vocabulary.
     assert "D-state" in prompt
@@ -110,7 +110,7 @@ def test_build_trajectory_prompt_uses_vocabulary_and_compresses_data(small_confi
 
 
 def test_build_risk_prompt_uses_vocabulary_and_compresses_data(small_config, risk_result):
-    prompt = _build_risk_prompt(risk_result, small_config)
+    prompt = _build_risk_prompt(_build_risk_facts(risk_result, small_config))
 
     assert "tail risk" in prompt.lower()
     assert "Surplus process" in prompt

@@ -96,8 +96,8 @@ def run_monte_carlo(
         risk_config = cfg.get("risk", {})
         simulation = cfg["simulation"]
 
-        n_paths = int(paths or risk_config.get("monte_carlo_paths", 1000))
-        level = float(confidence or risk_config.get("confidence_level", 0.95))
+        n_paths = int(paths if paths is not None else risk_config.get("monte_carlo_paths", 1000))
+        level = float(confidence if confidence is not None else risk_config.get("confidence_level", 0.95))
         base_seed = int(simulation.get("seed", 42))
 
     # Determine parallelism - use all available cores by default

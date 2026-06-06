@@ -215,12 +215,13 @@ def _build_trajectory_facts(result: dict[str, Any], config: ConfigLike) -> str:
     )
 
 
-def _build_trajectory_prompt(result: dict[str, Any], config: ConfigLike) -> str:
-    return (
-        f"{RUIN_VOCABULARY_GLOSSARY}\n"
-        f"{_build_trajectory_facts(result, config)}\n\n"
-        f"{_TRAJECTORY_REPORT_INSTRUCTIONS}"
-    )
+def _build_trajectory_prompt(facts: str) -> str:
+    """Assemble the full Codex prompt from a pre-computed trajectory facts block.
+
+    Accepts the output of `_build_trajectory_facts` so `generate_report` can
+    compute the facts once and share it between the prompt and the appendix.
+    """
+    return f"{RUIN_VOCABULARY_GLOSSARY}\n{facts}\n\n{_TRAJECTORY_REPORT_INSTRUCTIONS}"
 
 
 def _build_risk_facts(result: dict[str, Any], config: ConfigLike) -> str:
@@ -253,12 +254,13 @@ def _build_risk_facts(result: dict[str, Any], config: ConfigLike) -> str:
     return f"## Scenario configuration\n{_build_config_summary(config)}\n\n## Monte Carlo risk result\n{stats}"
 
 
-def _build_risk_prompt(result: dict[str, Any], config: ConfigLike) -> str:
-    return (
-        f"{RUIN_VOCABULARY_GLOSSARY}\n"
-        f"{_build_risk_facts(result, config)}\n\n"
-        f"{_RISK_REPORT_INSTRUCTIONS}"
-    )
+def _build_risk_prompt(facts: str) -> str:
+    """Assemble the full Codex prompt from a pre-computed risk facts block.
+
+    Accepts the output of `_build_risk_facts` so `generate_report` can
+    compute the facts once and share it between the prompt and the appendix.
+    """
+    return f"{RUIN_VOCABULARY_GLOSSARY}\n{facts}\n\n{_RISK_REPORT_INSTRUCTIONS}"
 
 
 def _call_codex(prompt: str, model: str | None = None, effort: str | None = None) -> CodexNarration:
@@ -385,10 +387,10 @@ def generate_report(
     kind = detect_result_kind(result)
     if kind == "trajectory":
         facts = _build_trajectory_facts(result, config)
-        prompt = _build_trajectory_prompt(result, config)
+        prompt = _build_trajectory_prompt(facts)
     else:
         facts = _build_risk_facts(result, config)
-        prompt = _build_risk_prompt(result, config)
+        prompt = _build_risk_prompt(facts)
 
     narration = _call_codex(prompt, model=model, effort=effort)
     content = (

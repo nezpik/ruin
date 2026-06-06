@@ -82,6 +82,9 @@ def _maybe_explain(
     except ImportError as exc:
         logger.error("Skipping --explain: %s", exc)
         return
+    except Exception as exc:
+        logger.warning("--explain failed and will be skipped (simulation output is unaffected): %s", exc)
+        return
     logger.info("AI report written to %s", out)
 
 
