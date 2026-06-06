@@ -265,6 +265,36 @@ def test_cli_simulate_without_explain_unchanged(tmp_path, golden_config_path, ca
     assert "AI report written to" not in caplog.text
 
 
+def test_cli_explain_missing_dependency_does_not_crash(tmp_path, golden_config_path, monkeypatch, caplog):
+    """A missing 'ai' extra must not turn a successful run into a crash (see _call_codex's ImportError)."""
+
+    def missing_dependency(prompt: str, model: str | None = None) -> str:
+        raise ImportError("Codex narration requires the optional 'ai' extra: pip install 'ruin[ai]'")
+
+    monkeypatch.setattr(narrator, "_call_codex", missing_dependency)
+    caplog.set_level("INFO", logger="ruin.cli")
+    out_path = tmp_path / "explain.md"
+
+    rc = cli.main(
+        [
+            "simulate",
+            "--config",
+            str(golden_config_path),
+            "--max-steps",
+            "5",
+            "--output",
+            str(tmp_path / "frames.txt"),
+            "--explain",
+            str(out_path),
+        ]
+    )
+
+    assert rc == 0
+    assert not out_path.exists()
+    assert "Skipping --explain" in caplog.text
+    assert "pip install 'ruin[ai]'" in caplog.text
+
+
 # ---------------------------------------------------------------------------
 # Optional-dependency boundary.
 # ---------------------------------------------------------------------------

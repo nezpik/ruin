@@ -56,7 +56,11 @@ def _maybe_explain(result: dict[str, Any], config: RuinConfig | dict[str, Any], 
         return
     from ruin.ai.narrator import generate_report
 
-    out = generate_report(result, config, output_path=explain_path)
+    try:
+        out = generate_report(result, config, output_path=explain_path)
+    except ImportError as exc:
+        logger.error("Skipping --explain: %s", exc)
+        return
     logger.info("AI report written to %s", out)
 
 
