@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.0] - 2026-06
+
+**AI narration**: optional Codex-powered research-report generation layered on top of `simulate`/`risk` results.
+
+### Added
+
+- New optional `ruin/ai/` package (`ruin.ai.narrator`) — reads and summarizes a finished `run_trajectory`/`run_monte_carlo` result, builds a complete prompt grounded in RUIN's own vocabulary (`D`, Q dots, D-state, chaos/order pressure, surplus, ruin — distilled from `RUIN.md`), and asks an OpenAI Codex thread (`Sandbox.read_only`, used purely as a text-generation engine) to write a structured markdown research report, which RUIN itself wraps with a disclosure header/footer and writes to disk
+- `--explain PATH` flag on both `ruin simulate` and `ruin risk` — writes the AI-narrated report to `PATH` after the run completes; omitted by default so existing pipelines are unaffected
+- New optional dependency extra `ai` (`pip install "ruin[ai]"`, `openai-codex>=0.1.0b3`); the `openai_codex` import is fully lazy so the rest of `ruin` stays importable without it
+- `tests/test_ai_narrator.py` — pure-function tests for prompt-building/compression helpers, mocked-Codex tests for `generate_report` (file output, disclosure wrapping, trajectory/risk auto-detection, `model=` forwarding), CLI wiring tests for `--explain`, and a guarded test documenting the `ImportError` raised without the optional extra
+- README "AI Research Reports (optional)" section documenting installation, Codex auth requirements, and both `--explain` examples
+
+---
+
 ## [0.2.5] - 2026-06
 
 **Maintenance release**: dependency tooling migration (uv), structured logging, and reproducibility fixes on top of the v0.2 Foundation Hardening base.

@@ -100,6 +100,38 @@ The `--jobs` flag controls parallelism (defaults to available cores).
 
 ---
 
+## AI Research Reports (optional)
+
+RUIN can narrate a finished `simulate`/`risk` run into a markdown research
+report — written in RUIN's own vocabulary (`D`, Q dots, D-state, surplus,
+ruin) — using [OpenAI Codex](https://github.com/openai/codex) as a pure
+text-generation engine. RUIN reads and summarizes the results itself,
+builds the full prompt, and writes the report; Codex never touches the
+filesystem (it runs in a read-only sandbox).
+
+Install the optional `ai` extra:
+
+```bash
+python -m pip install "ruin[ai]"
+```
+
+This requires an authenticated local Codex session (`codex login`, or an
+API key via `codex login --api-key`) — the SDK reuses your existing Codex
+CLI credentials.
+
+Then pass `--explain PATH` to either subcommand:
+
+```bash
+uv run ruin simulate --config examples/urban_ruin_shift.yaml --max-steps 40 --explain /tmp/trajectory_report.md
+uv run ruin risk --config examples/urban_ruin_shift.yaml --paths 200 --max-steps 50 --explain /tmp/risk_report.md
+```
+
+Each report opens with a disclosure header noting that it is AI-generated
+from the run's own data — always check the narrative against the raw
+JSON/CLI output before citing any figure from it.
+
+---
+
 ## Core Vocabulary (Preserved from v0.1)
 
 - **Destiny frame `D`**: The bounded space in which all logistics futures unfold.
@@ -130,6 +162,8 @@ ruin/
 │   └── ruin_probability.py     # Parallel MC + bootstrap CI + VaR/ES
 ├── viz/
 │   └── square.py               # Matplotlib FuncAnimation + real-field GIFs
+├── ai/
+│   └── narrator.py             # Optional Codex-powered AI research reports (--explain)
 ├── metrics/
 │   └── pressure.py
 ├── config.py
