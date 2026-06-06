@@ -13,6 +13,7 @@ extra installed.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Union
@@ -21,6 +22,24 @@ from ruin.config import to_dict
 from ruin.config_models import RuinConfig
 
 ConfigLike = Union[dict[str, Any], RuinConfig]
+
+
+@dataclass(frozen=True)
+class CodexNarration:
+    """Narrative text plus the traceable provenance of the Codex turn that produced it.
+
+    Codex exposes no seed/temperature knob, so its prose can never be made
+    reproducible the way the rest of RUIN is. What *can* be pinned down is
+    exactly which call produced it — the same "simple, traceable loop"
+    discipline RUIN.md asks of the simulation core, applied to the narration
+    layer instead.
+    """
+
+    text: str
+    thread_id: str | None = None
+    turn_id: str | None = None
+    duration_ms: int | None = None
+    total_tokens: int | None = None
 
 
 RUIN_VOCABULARY_GLOSSARY = """\
@@ -163,7 +182,13 @@ def _build_config_summary(config: ConfigLike) -> str:
     )
 
 
-def _build_trajectory_prompt(result: dict[str, Any], config: ConfigLike) -> str:
+def _build_trajectory_facts(result: dict[str, Any], config: ConfigLike) -> str:
+    """The deterministic per-run data block — a pure function of `result`/`config`.
+
+    Reused both inside the prompt (so Codex sees it) and verbatim in the
+    report's appendix (so a reader can check the narrative against the exact
+    figures Codex was given, without leaving the document).
+    """
     stats = (
         f"ruined={result.get('ruined')} ruin_time={result.get('ruin_time')} "
         f"ruin_reason={result.get('ruin_reason')}\n"
@@ -183,16 +208,28 @@ def _build_trajectory_prompt(result: dict[str, Any], config: ConfigLike) -> str:
     transitions = _summarize_d_state_transitions(result.get("d_state_path", []))
 
     return (
-        f"{RUIN_VOCABULARY_GLOSSARY}\n"
         f"## Scenario configuration\n{_build_config_summary(config)}\n\n"
         f"## Trajectory result\n{stats}\n\n"
         f"## Path summaries (compressed — the only numeric series available)\n{paths}\n\n"
-        f"## D-state regime sequence (run-length encoded)\n{transitions}\n\n"
+        f"## D-state regime sequence (run-length encoded)\n{transitions}"
+    )
+
+
+def _build_trajectory_prompt(result: dict[str, Any], config: ConfigLike) -> str:
+    return (
+        f"{RUIN_VOCABULARY_GLOSSARY}\n"
+        f"{_build_trajectory_facts(result, config)}\n\n"
         f"{_TRAJECTORY_REPORT_INSTRUCTIONS}"
     )
 
 
-def _build_risk_prompt(result: dict[str, Any], config: ConfigLike) -> str:
+def _build_risk_facts(result: dict[str, Any], config: ConfigLike) -> str:
+    """The deterministic per-run data block — a pure function of `result`/`config`.
+
+    Reused both inside the prompt (so Codex sees it) and verbatim in the
+    report's appendix (so a reader can check the narrative against the exact
+    figures Codex was given, without leaving the document).
+    """
     ruin_times = result.get("time_to_ruin") or []
     if ruin_times:
         ttr_summary = (
@@ -213,21 +250,28 @@ def _build_risk_prompt(result: dict[str, Any], config: ConfigLike) -> str:
         f"time_to_ruin: {ttr_summary}"
     )
 
+    return f"## Scenario configuration\n{_build_config_summary(config)}\n\n## Monte Carlo risk result\n{stats}"
+
+
+def _build_risk_prompt(result: dict[str, Any], config: ConfigLike) -> str:
     return (
         f"{RUIN_VOCABULARY_GLOSSARY}\n"
-        f"## Scenario configuration\n{_build_config_summary(config)}\n\n"
-        f"## Monte Carlo risk result\n{stats}\n\n"
+        f"{_build_risk_facts(result, config)}\n\n"
         f"{_RISK_REPORT_INSTRUCTIONS}"
     )
 
 
-def _call_codex(prompt: str, model: str | None = None, effort: str | None = None) -> str:
+def _call_codex(prompt: str, model: str | None = None, effort: str | None = None) -> CodexNarration:
     """The single point where the optional Codex SDK is touched (and mocked in tests).
 
     `effort` is passed through as a plain string (e.g. "low", "high") rather
     than the SDK's `ReasoningEffort` enum — Codex's own Pydantic validation
     coerces valid level names and rejects invalid ones, so we don't need to
     import the enum just to forward a value un-altered.
+
+    Returns a `CodexNarration`, not a bare string: the turn's id/thread id,
+    duration, and token usage are recorded alongside the text so the report
+    can carry full provenance of the one genuinely non-deterministic step.
     """
     try:
         from openai_codex import Codex, Sandbox
@@ -238,32 +282,78 @@ def _call_codex(prompt: str, model: str | None = None, effort: str | None = None
 
     with Codex() as codex:
         thread = codex.thread_start(sandbox=Sandbox.read_only, model=model)
-        turn = thread.run(prompt, effort=effort)
-        return turn.final_response or ""
+        # `effort` is `str | None` (see docstring): Codex's own Pydantic layer
+        # coerces valid level names to `ReasoningEffort` and rejects invalid
+        # ones, but its stub types `run(effort=...)` as `ReasoningEffort | None`.
+        turn = thread.run(prompt, effort=effort)  # type: ignore[arg-type]
+        total_tokens = turn.usage.total.total_tokens if turn.usage is not None else None
+        return CodexNarration(
+            text=turn.final_response or "",
+            thread_id=thread.id,
+            turn_id=turn.id,
+            duration_ms=turn.duration_ms,
+            total_tokens=total_tokens,
+        )
 
 
-def _wrap_report(raw_text: str, config: ConfigLike, kind: str) -> str:
+def _build_appendix(facts: str) -> str:
+    """A verbatim, byte-reproducible echo of the data block fed to Codex.
+
+    Unlike the narrative above it, this section is generated by RUIN itself
+    from `result`/`config` — re-running the same scenario and seed reproduces
+    it exactly, so a reader can check every claim in the prose against it
+    without leaving the report.
+    """
+    return (
+        "\n\n---\n\n"
+        "## Appendix: source data (verbatim, as given to Codex)\n\n"
+        "> Generated directly by RUIN, not Codex, from the same simulation\n"
+        "> `result`/`config` that produced the prompt above — deterministic,\n"
+        "> and reproducible byte-for-byte by re-running this scenario and seed.\n"
+        "> Cross-check every figure in the narrative against this block.\n\n"
+        f"{facts}\n"
+    )
+
+
+def _wrap_report(
+    narration: CodexNarration,
+    config: ConfigLike,
+    kind: str,
+    *,
+    model: str | None,
+    effort: str | None,
+) -> str:
     scenario_line = _build_config_summary(config).splitlines()[0]
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     kind_label = "single trajectory" if kind == "trajectory" else "Monte Carlo risk analysis"
+
+    duration = f"{narration.duration_ms} ms" if narration.duration_ms is not None else "n/a"
+    tokens = f"{narration.total_tokens} tokens" if narration.total_tokens is not None else "n/a"
+    thread_id = narration.thread_id or "n/a"
+    turn_id = narration.turn_id or "n/a"
 
     header = (
         f"# RUIN AI Research Report ({kind_label})\n\n"
         f"> AI-generated by OpenAI Codex from RUIN simulation data — every figure\n"
         f"> below is sourced from the simulation output; verify against the raw\n"
-        f"> JSON results before citing.\n\n"
+        f"> JSON results (and the appendix at the end of this report) before citing.\n\n"
         f"- {scenario_line}\n"
         f"- Result kind: `{kind}`\n"
-        f"- Generated: {generated_at}\n\n"
+        f"- Generated: {generated_at}\n"
+        f"- Codex turn: model=`{model or 'default'}` effort=`{effort or 'default'}` "
+        f"· {duration} · {tokens}\n"
+        f"- Provenance: thread=`{thread_id}` turn=`{turn_id}`\n\n"
         f"---\n\n"
     )
     footer = (
         "\n\n---\n"
         "*Report generated by the RUIN AI Narrator (`ruin.ai.narrator`) via the "
         "OpenAI Codex Python SDK. Treat the narrative above as an interpretive "
-        "aid, not a substitute for the underlying data.*\n"
+        "aid, not a substitute for the underlying data — Codex's prose cannot be "
+        "reproduced, but the call that produced it (above) and the data it saw "
+        "(appendix below) can be.*\n"
     )
-    body = raw_text.strip() or "_Codex returned no narrative content for this run._"
+    body = narration.text.strip() or "_Codex returned no narrative content for this run._"
     return header + body + footer
 
 
@@ -283,15 +373,28 @@ def generate_report(
 
     `effort` (e.g. "minimal", "low", "medium", "high", "xhigh") trades report
     depth for speed/cost — forwarded straight through to the Codex turn.
+
+    Codex's prose is the one place this report is genuinely non-deterministic
+    (the SDK exposes no seed/temperature control). Rather than pretend
+    otherwise, the report brackets that prose with two things RUIN *can* keep
+    deterministic and traceable: a header recording exactly which Codex turn
+    produced it (`CodexNarration` — thread/turn id, duration, token usage),
+    and an appendix containing the same compressed `result`/`config` summary
+    Codex was given, byte-reproducible by re-running the scenario and seed.
     """
     kind = detect_result_kind(result)
-    prompt = (
-        _build_trajectory_prompt(result, config)
-        if kind == "trajectory"
-        else _build_risk_prompt(result, config)
+    if kind == "trajectory":
+        facts = _build_trajectory_facts(result, config)
+        prompt = _build_trajectory_prompt(result, config)
+    else:
+        facts = _build_risk_facts(result, config)
+        prompt = _build_risk_prompt(result, config)
+
+    narration = _call_codex(prompt, model=model, effort=effort)
+    content = (
+        _wrap_report(narration, config, kind, model=model, effort=effort)
+        + _build_appendix(facts)
     )
-    narrative = _call_codex(prompt, model=model, effort=effort)
-    content = _wrap_report(narrative, config, kind)
 
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
