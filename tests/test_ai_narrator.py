@@ -133,8 +133,8 @@ def test_build_risk_prompt_uses_vocabulary_and_compresses_data(small_config, ris
 def fake_codex(monkeypatch):
     calls: list[dict[str, object]] = []
 
-    def fake_call_codex(prompt: str, model: str | None = None) -> str:
-        calls.append({"prompt": prompt, "model": model})
+    def fake_call_codex(prompt: str, model: str | None = None, effort: str | None = None) -> str:
+        calls.append({"prompt": prompt, "model": model, "effort": effort})
         return "This is the narrated analysis body."
 
     monkeypatch.setattr(narrator, "_call_codex", fake_call_codex)
@@ -158,6 +158,7 @@ def test_generate_report_trajectory(tmp_path, small_config, trajectory_result, f
 
     assert len(fake_codex) == 1
     assert fake_codex[0]["model"] is None
+    assert fake_codex[0]["effort"] is None
 
 
 def test_generate_report_risk(tmp_path, small_config, risk_result, fake_codex):
@@ -179,6 +180,15 @@ def test_generate_report_forwards_model_kwarg(tmp_path, small_config, trajectory
 
     assert len(fake_codex) == 1
     assert fake_codex[0]["model"] == "gpt-5-codex"
+
+
+def test_generate_report_forwards_effort_kwarg(tmp_path, small_config, trajectory_result, fake_codex):
+    out_path = tmp_path / "report.md"
+
+    generate_report(trajectory_result, small_config, out_path, effort="low")
+
+    assert len(fake_codex) == 1
+    assert fake_codex[0]["effort"] == "low"
 
 
 def test_generate_report_creates_parent_directories(tmp_path, small_config, trajectory_result, fake_codex):
@@ -221,6 +231,46 @@ def test_cli_simulate_explain_writes_report(tmp_path, golden_config_path, fake_c
     assert rc == 0
     assert out_path.exists()
     assert "AI report written to" in caplog.text
+
+
+def test_cli_simulate_explain_effort_forwards_to_codex(tmp_path, golden_config_path, fake_codex, caplog):
+    out_path = tmp_path / "explain.md"
+    caplog.set_level("INFO", logger="ruin.cli")
+
+    rc = cli.main(
+        [
+            "simulate",
+            "--config",
+            str(golden_config_path),
+            "--max-steps",
+            "5",
+            "--output",
+            str(tmp_path / "frames.txt"),
+            "--explain",
+            str(out_path),
+            "--explain-effort",
+            "low",
+        ]
+    )
+
+    assert rc == 0
+    assert len(fake_codex) == 1
+    assert fake_codex[0]["effort"] == "low"
+
+
+def test_cli_explain_effort_rejects_invalid_choice(golden_config_path, capsys):
+    with pytest.raises(SystemExit):
+        cli.main(
+            [
+                "simulate",
+                "--config",
+                str(golden_config_path),
+                "--explain-effort",
+                "ludicrous",
+            ]
+        )
+
+    assert "invalid choice" in capsys.readouterr().err
 
 
 def test_cli_risk_explain_writes_report(tmp_path, golden_config_path, fake_codex, caplog):
@@ -268,7 +318,7 @@ def test_cli_simulate_without_explain_unchanged(tmp_path, golden_config_path, ca
 def test_cli_explain_missing_dependency_does_not_crash(tmp_path, golden_config_path, monkeypatch, caplog):
     """A missing 'ai' extra must not turn a successful run into a crash (see _call_codex's ImportError)."""
 
-    def missing_dependency(prompt: str, model: str | None = None) -> str:
+    def missing_dependency(prompt: str, model: str | None = None, effort: str | None = None) -> str:
         raise ImportError("Codex narration requires the optional 'ai' extra: pip install 'ruin[ai]'")
 
     monkeypatch.setattr(narrator, "_call_codex", missing_dependency)

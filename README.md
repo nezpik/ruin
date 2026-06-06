@@ -130,6 +130,17 @@ Each report opens with a disclosure header noting that it is AI-generated
 from the run's own data — always check the narrative against the raw
 JSON/CLI output before citing any figure from it.
 
+Add `--explain-effort LEVEL` (one of `none`, `minimal`, `low`, `medium`,
+`high`, `xhigh`) to trade narrative depth for speed/cost — it's forwarded
+straight through to Codex's reasoning-effort setting for that turn:
+
+```bash
+uv run ruin simulate --config examples/urban_ruin_shift.yaml --max-steps 40 \
+    --explain /tmp/trajectory_report.md --explain-effort low
+```
+
+Omit it to use Codex's own default.
+
 ---
 
 ## Core Vocabulary (Preserved from v0.1)

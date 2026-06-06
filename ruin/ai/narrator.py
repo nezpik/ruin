@@ -221,8 +221,14 @@ def _build_risk_prompt(result: dict[str, Any], config: ConfigLike) -> str:
     )
 
 
-def _call_codex(prompt: str, model: str | None = None) -> str:
-    """The single point where the optional Codex SDK is touched (and mocked in tests)."""
+def _call_codex(prompt: str, model: str | None = None, effort: str | None = None) -> str:
+    """The single point where the optional Codex SDK is touched (and mocked in tests).
+
+    `effort` is passed through as a plain string (e.g. "low", "high") rather
+    than the SDK's `ReasoningEffort` enum — Codex's own Pydantic validation
+    coerces valid level names and rejects invalid ones, so we don't need to
+    import the enum just to forward a value un-altered.
+    """
     try:
         from openai_codex import Codex, Sandbox
     except ImportError as exc:
@@ -232,7 +238,7 @@ def _call_codex(prompt: str, model: str | None = None) -> str:
 
     with Codex() as codex:
         thread = codex.thread_start(sandbox=Sandbox.read_only, model=model)
-        turn = thread.run(prompt)
+        turn = thread.run(prompt, effort=effort)
         return turn.final_response or ""
 
 
@@ -266,6 +272,7 @@ def generate_report(
     config: ConfigLike,
     output_path: str | Path,
     model: str | None = None,
+    effort: str | None = None,
 ) -> Path:
     """Narrate a `run_trajectory`/`run_monte_carlo` result via Codex and write it to disk.
 
@@ -273,6 +280,9 @@ def generate_report(
     full prompt itself (RUIN vocabulary + a faithful, compressed summary of
     `result`/`config`) and writes Codex's response to `output_path` wrapped in
     a disclosure header/footer. Returns the written `Path`.
+
+    `effort` (e.g. "minimal", "low", "medium", "high", "xhigh") trades report
+    depth for speed/cost — forwarded straight through to the Codex turn.
     """
     kind = detect_result_kind(result)
     prompt = (
@@ -280,7 +290,7 @@ def generate_report(
         if kind == "trajectory"
         else _build_risk_prompt(result, config)
     )
-    narrative = _call_codex(prompt, model=model)
+    narrative = _call_codex(prompt, model=model, effort=effort)
     content = _wrap_report(narrative, config, kind)
 
     path = Path(output_path)
