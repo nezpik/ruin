@@ -7,20 +7,20 @@ There is one configuration path: YAML (or a plain dict) is validated into a
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Union
+from typing import Any
 
 import yaml
 
 from .config_models import RuinConfig
 
-ConfigLike = Union[dict[str, Any], RuinConfig]
+ConfigLike = dict[str, Any] | RuinConfig
 
 
 def load_config(path: str | Path) -> dict[str, Any]:
     """Read a YAML config file into a plain dict (not yet validated)."""
     raw = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
-        raise ValueError(f"Config file {path} must contain a YAML mapping at the top level")
+        raise TypeError(f"Config file {path} must contain a YAML mapping at the top level")
     return raw
 
 

@@ -4,7 +4,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.11--3.14-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![v0.4.0](https://img.shields.io/badge/Version-v0.4.0-green.svg)](https://github.com/nezpik/ruin)
+[![v0.5.0](https://img.shields.io/badge/Version-v0.5.0-green.svg)](https://github.com/nezpik/ruin)
 
 RUIN is a research-grade framework for measuring when physical logistics systems run out of destiny. It translates quantitative finance concepts (ruin theory, jump-diffusion, Monte Carlo paths, VaR, Expected Shortfall, bootstrap confidence intervals) into a logistics language built around **physical uncertainty**, **service failure**, and **systemic collapse**.
 
@@ -27,18 +27,18 @@ In RUIN:
 
 ---
 
-## How the Model Works (v0.4)
+## How the Model Works
 
 - **Q dots travel and can succeed.** Each Q dot enters `D` with an origin, a destination, and a time window. Delivered on time, it earns surplus. Once late, it drains surplus every step until it is delivered late or abandoned.
 - **Demand keeps arriving.** New Q dots enter every step, so the shift is a flow, not a fixed population running down a clock.
 - **Travel is a jump-diffusion.** Progress per step is drift slowed by local field drag, plus Gaussian noise, minus occasional compound Poisson setbacks.
-- **Disruption is a field of events.** Shocks land on the grid, spread to neighbouring cells, and fade. The field is subcritical by construction: a shock can never amplify itself.
+- **Disruption is a field of events.** Shocks land on the grid, spread to neighbouring cells, and fade. The field is subcritical by construction: a shock can never amplify itself. By default it reflects at the edges: disruption, like Q dots, cannot leave `D`.
 - **Q and D co-evolve.** The field slows Q dots; late and failed Q dots add disruption where they stand.
-- **Ruin is uncertain.** With no disruption the reference shift never ruins. With the calibrated disruption level about one shift in eight does, at very different times.
+- **Ruin is uncertain.** With no disruption the reference shift never ruins. With the calibrated disruption level about one shift in seven does, at very different times.
 
 Everything is seeded and reproducible, Monte Carlo runs in parallel, and a 480-step path takes about 0.2 s.
 
-See [CHANGELOG.md](CHANGELOG.md) for what changed in v0.4 and how to migrate a config.
+See [CHANGELOG.md](CHANGELOG.md) for what changed in each version and how to migrate a config.
 
 ---
 
@@ -81,28 +81,63 @@ Example output (`time_to_ruin` list omitted):
 ```json
 {
   "paths": 200,
-  "ruin_probability": 0.12,
-  "ruin_probability_ci": [
-    0.0799,
-    0.165
-  ],
-  "ruin_by_surplus": 24,
+  "ruin_probability": 0.115,
+  "ruin_probability_ci": [0.0779, 0.1666],
+  "ruin_by_surplus": 23,
   "ruin_by_sla": 0,
-  "mean_loss": 165.3989,
-  "loss_std": 83.0391,
-  "value_at_risk": 321.2247,
-  "expected_shortfall": 342.9832,
-  "mean_final_surplus": 208.534,
+  "mean_loss": 195.1919,
+  "mean_loss_ci": [178.3592, 212.7041],
+  "loss_std": 124.3531,
+  "value_at_risk": 412.3422,
+  "value_at_risk_ci": [357.2197, 553.1144],
+  "expected_shortfall": 540.6438,
+  "expected_shortfall_ci": [450.5523, 611.1435],
+  "loss_share_by_type": {
+    "STANDARD": 0.0948,
+    "EXPRESS": 0.9028,
+    "BULKY": 0.0024
+  },
+  "mean_final_surplus": 194.8714,
+  "mean_min_surplus": 78.0061,
   "mean_on_time_rate": 0.9975,
-  "mean_time_to_ruin": 243.42,
+  "mean_time_to_ruin": 244.39,
   "confidence_level": 0.95,
   "n_jobs": 4
 }
 ```
 
-With 1,000 paths the same scenario gives a ruin probability of 0.12 (95% CI 0.10 to 0.14).
+How to read it:
+
+- Every `*_ci` is a confidence interval at `confidence_level`. The ruin probability uses a Wilson interval, which stays informative even when no path ruins. The loss figures use a bootstrap.
+- Each path runs to the end of the shift even after it ruins, so the loss figures describe whole shifts and are not cut off at the moment of ruin.
+- With 1,000 paths the same scenario gives a ruin probability of 0.14 (95% interval 0.12 to 0.16).
 
 The `--jobs` flag controls parallelism (defaults to available cores).
+
+---
+
+## Validation Against Ruin Theory
+
+The spatial model has no closed-form answer, but the layer underneath it does. Strip away the grid, feed the same surplus process a constant premium and compound Poisson claims with exponential sizes, and the ruin probability is known exactly (Cramér-Lundberg):
+
+```text
+psi(u) = (lam * mu / c) * exp(-(1/mu - lam/c) * u)
+```
+
+```bash
+uv run ruin validate
+```
+
+compares Monte Carlo estimates with that formula and exits non-zero if any exact value falls outside its interval. With 20,000 paths, claim rate 1, mean claim 1, premium 1.5:
+
+| Initial surplus | Exact | Monte Carlo | 99% interval |
+| --- | --- | --- | --- |
+| 0 | 0.6667 | 0.6699 | 0.6613 to 0.6784 |
+| 2 | 0.3423 | 0.3400 | 0.3314 to 0.3487 |
+| 5 | 0.1259 | 0.1236 | 0.1178 to 0.1298 |
+| 10 | 0.0238 | 0.0231 | 0.0205 to 0.0259 |
+
+This validates the surplus accounting, ruin detection, the Monte Carlo estimator, and the Wilson interval. It does not validate the spatial dynamics, which are checked by behavioural tests (no disruption means no ruin, the disruption field's long-run level matches its theoretical value, a larger buffer never ruins sooner, and so on).
 
 ---
 
@@ -173,7 +208,7 @@ Full definitions and deeper philosophy are in `RUIN.md`.
 
 ---
 
-## Current Architecture (v0.4.0)
+## Current Architecture (v0.5.0)
 
 ```
 ruin/
@@ -187,7 +222,8 @@ ruin/
 ├── simulation/
 │   └── agent_based.py
 ├── risk/
-│   └── ruin_probability.py     # Parallel MC + bootstrap CI + VaR/ES
+│   ├── ruin_probability.py     # Parallel MC, Wilson and bootstrap intervals, VaR/ES
+│   └── classical.py            # Cramér-Lundberg closed form and validation
 ├── viz/
 │   └── square.py               # Matplotlib FuncAnimation + real-field GIFs
 ├── ai/
@@ -225,15 +261,14 @@ These are explicitly deferred until the abstract mechanics are solid and reprodu
 
 **Done in v0.4 (model validity):** Q dots with destinations, arrivals, and completion; earned surplus; a subcritical disruption field; 2D travel with jumps; honoured ruin rule; a single validated configuration path; a reference scenario where ruin is uncertain.
 
-**Next (validation):**
-- A degenerate mode that reduces to classical Cramér-Lundberg, tested against the closed-form ruin probability
-- Wilson interval for ruin probability, confidence intervals for VaR and Expected Shortfall
-- Continuous integration (tests, ruff, mypy)
+**Done in v0.5 (validation):** agreement with the closed-form Cramér-Lundberg ruin probability; Wilson interval for ruin probability and bootstrap intervals for mean loss, VaR, and Expected Shortfall; losses measured over whole shifts; continuous integration; boundary modes, background risk, congestion memory, snapshot interval, and the visualization options wired to the config.
 
 **Then (making destiny measurable):**
 - Remaining destiny: the conditional survival probability from the current state, as a curve over the shift
 - Per-Q-dot contribution to ruin
-- Detection of clusters, corridors, and ruin zones; shock attribution
+- Parameter uncertainty: ruin probability is far more sensitive to shock rate and time windows than to Monte Carlo noise
+- Detection of clusters, corridors, and ruin zones; shock attribution by `shock_types`
+- Stronger Q-to-D feedback (congestion that slows travel), which today is weak
 
 **Later (when the abstract core is trusted):**
 - Real road graphs and spatial topologies
@@ -246,7 +281,9 @@ These are explicitly deferred until the abstract mechanics are solid and reprodu
 ## Run the Test Suite
 
 ```bash
-pytest -q
+uv run pytest -q          # full suite
+uv run ruff check . && uv run ruff format --check .
+uv run mypy ruin
 ```
 
 All tests must pass before any research use of a commit.
@@ -261,7 +298,7 @@ If you use RUIN, its concepts, terminology, code, or experimental outputs in aca
 
 Suggested citation:
 
-> Zouiti, Naji. RUIN: Ruin-probability Unified In Networks. v0.4.0, 2026.  
+> Zouiti, Naji. RUIN: Ruin-probability Unified In Networks. v0.5.0, 2026.  
 > GitHub: https://github.com/nezpik/ruin
 
 BibTeX:
@@ -271,7 +308,7 @@ BibTeX:
   author = {Zouiti, Naji},
   title = {RUIN: Ruin-probability Unified In Networks},
   year = {2026},
-  version = {0.4.0},
+  version = {0.5.0},
   url = {https://github.com/nezpik/ruin}
 }
 ```

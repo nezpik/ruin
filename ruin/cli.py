@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from ruin.config import load_ruin_config
 from ruin.config_models import RuinConfig
+from ruin.risk.classical import validate_against_cramer_lundberg
 from ruin.risk.ruin_probability import run_monte_carlo
 from ruin.simulation.agent_based import run_trajectory
 from ruin.viz.square import save_field_gif, save_text_frames
@@ -20,6 +21,14 @@ logger = logging.getLogger("ruin.cli")
 # Codex `ReasoningEffort` levels, low → high — accepted as plain strings and
 # forwarded to the SDK, which validates and coerces them itself.
 EXPLAIN_EFFORT_CHOICES = ["none", "minimal", "low", "medium", "high", "xhigh"]
+EXPLAIN_HELP = (
+    "Write an AI-narrated markdown research report to PATH via Codex "
+    "(requires the 'ai' extra: pip install 'ruin[ai]')"
+)
+EXPLAIN_EFFORT_HELP = (
+    "Codex reasoning effort for --explain — trade narrative depth for speed/cost "
+    "(default: Codex's own default)"
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -44,13 +53,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--explain",
         metavar="PATH",
         default=None,
-        help="Write an AI-narrated markdown research report to PATH via Codex (requires the 'ai' extra: pip install 'ruin[ai]')",
+        help=EXPLAIN_HELP,
     )
     simulate.add_argument(
         "--explain-effort",
         choices=EXPLAIN_EFFORT_CHOICES,
         default=None,
-        help="Codex reasoning effort for --explain — trade narrative depth for speed/cost (default: Codex's own default)",
+        help=EXPLAIN_EFFORT_HELP,
     )
 
     risk = subparsers.add_parser("risk", help="Run Monte Carlo ruin-risk estimation")
@@ -65,14 +74,21 @@ def build_parser() -> argparse.ArgumentParser:
         "--explain",
         metavar="PATH",
         default=None,
-        help="Write an AI-narrated markdown research report to PATH via Codex (requires the 'ai' extra: pip install 'ruin[ai]')",
+        help=EXPLAIN_HELP,
     )
     risk.add_argument(
         "--explain-effort",
         choices=EXPLAIN_EFFORT_CHOICES,
         default=None,
-        help="Codex reasoning effort for --explain — trade narrative depth for speed/cost (default: Codex's own default)",
+        help=EXPLAIN_EFFORT_HELP,
     )
+
+    validate = subparsers.add_parser(
+        "validate",
+        help="Check the risk layer against the closed-form Cramér-Lundberg ruin probability",
+    )
+    validate.add_argument("--paths", type=int, default=20000)
+    validate.add_argument("--seed", type=int, default=42)
 
     return parser
 
@@ -92,7 +108,7 @@ def _maybe_explain(
     except ImportError as exc:
         logger.error("Skipping --explain: %s", exc)
         return
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - narration is optional and must never fail a run
         logger.warning(
             "--explain failed and will be skipped (simulation output is unaffected): %s", exc
         )
@@ -106,9 +122,14 @@ def main(argv: list[str] | None = None) -> int:
 
     logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout)
 
+    if args.command == "validate":
+        report = validate_against_cramer_lundberg(paths=args.paths, seed=args.seed)
+        logger.info(json.dumps(report, indent=2))
+        return 0 if report["passed"] else 1
+
     try:
         config = load_ruin_config(args.config)
-    except (OSError, ValueError, ValidationError) as exc:
+    except (OSError, TypeError, ValueError, ValidationError) as exc:
         logger.error("Invalid config %s:\n%s", args.config, exc)
         return 2
 
@@ -123,7 +144,7 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.visualize:
             gif_path = Path(args.output).with_suffix(".gif")
-            save_field_gif(result, config, output=gif_path, fps=8, max_frames=120)
+            save_field_gif(result, config, output=gif_path, fps=8)
             logger.info("Animation written to %s", gif_path)
 
         summary = {
@@ -131,6 +152,8 @@ def main(argv: list[str] | None = None) -> int:
             "ruin_time": result["ruin_time"],
             "ruin_reason": result["ruin_reason"],
             "final_surplus": result["final_surplus"],
+            "min_surplus": result["min_surplus"],
+            "loss_by_type": result["loss_by_type"],
             "final_d_state": result["final_d_state"],
             "delivered": result["delivered"],
             "delivered_late": result["delivered_late"],

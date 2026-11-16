@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 
-class QDotType(str, Enum):
+class QDotType(StrEnum):
     STANDARD = "STANDARD"
     EXPRESS = "EXPRESS"
     BULKY = "BULKY"
 
 
-class QDotStatus(str, Enum):
+class QDotStatus(StrEnum):
     ACTIVE = "ACTIVE"  # travelling, still inside its time window
     LATE = "LATE"  # travelling, time window exhausted, accruing penalty
     DELIVERED = "DELIVERED"  # reached its destination on time

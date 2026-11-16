@@ -21,7 +21,9 @@ class SimulationConfig(BaseModel):
     grid_width: int = Field(default=30, ge=1)
     grid_height: int = Field(default=30, ge=1)
     shift_duration: int = Field(ge=1)
-    dt: float = Field(default=1.0, gt=0)
+    # One step is one unit of time. Finer time steps are not supported yet, so
+    # every rate, window, and decay in the config is "per step".
+    dt: float = Field(default=1.0, ge=1.0, le=1.0)
 
 
 class QDotTypeParams(BaseModel):
@@ -84,9 +86,13 @@ class DStateThresholds(BaseModel):
 class ProbabilitySquareConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    base_risk_intensity: float = 0.0
-    congestion_memory: float = Field(default=0.85, ge=0, le=1)
+    # Background disruption present in every cell at all times (5 = fully blocked).
+    base_risk_intensity: float = Field(default=0.0, ge=0)
+    # How long a cell remembers that Q dots stalled there (0 = no memory).
+    congestion_memory: float = Field(default=0.85, ge=0, lt=1)
+    # What happens to disruption spreading past the edge of D.
     boundary_mode: Literal["reflect", "wrap", "absorb"] = "reflect"
+    # Keep Q-dot and field snapshots every this many steps (paths are kept every step).
     snapshot_interval: int = Field(default=1, ge=1)
     initial_d_state: Literal["stable", "stressed", "disrupted", "chaotic", "recovering"] = "stable"
     d_state_thresholds: DStateThresholds
@@ -183,6 +189,13 @@ class RuinConfig(BaseModel):
     ruin: RuinParams
     risk: RiskConfig
     visualization: VisualizationConfig
+
+    @model_validator(mode="after")
+    def _radius_fits_grid(self) -> RuinConfig:
+        smallest = min(self.simulation.grid_width, self.simulation.grid_height)
+        if self.disruption_field.propagation_radius > smallest:
+            raise ValueError("propagation_radius must not exceed the smaller grid dimension")
+        return self
 
 
 # Convenience type alias

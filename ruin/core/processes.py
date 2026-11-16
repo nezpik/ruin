@@ -85,10 +85,17 @@ def sample_shock_events(
     return xs, ys, intensities
 
 
+def blocked_fraction(intensity: np.ndarray) -> np.ndarray:
+    """How blocked a cell is, in [0, 1], from its disruption intensity."""
+    return np.asarray(
+        np.clip(intensity, 0.0, EXPOSURE_SATURATION) / EXPOSURE_SATURATION, dtype=float
+    )
+
+
 def field_drag(exposures: np.ndarray) -> np.ndarray:
     """Speed multiplier in [MIN_DRAG, 1] from local field exposure."""
-    blocked = np.clip(exposures, 0.0, EXPOSURE_SATURATION) / EXPOSURE_SATURATION
-    return 1.0 - (1.0 - MIN_DRAG) * blocked
+    blocked = blocked_fraction(exposures)
+    return np.asarray(1.0 - (1.0 - MIN_DRAG) * blocked, dtype=float)
 
 
 def batch_qdot_travel_step(

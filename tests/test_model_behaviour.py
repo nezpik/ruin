@@ -97,7 +97,7 @@ def test_larger_buffer_never_ruins_sooner(golden_ruin_config):
 
     small, large = ruin_times(20.0), ruin_times(200.0)
     assert any(t != float("inf") for t in small)
-    assert all(a <= b for a, b in zip(small, large))
+    assert all(a <= b for a, b in zip(small, large, strict=True))
 
 
 @pytest.mark.parametrize(
@@ -140,3 +140,31 @@ def test_ruined_trajectory_ends_in_ruined_state(golden_ruin_config):
     assert result["final_d_state"] == "RUINED"
     assert result["d_state_path"][-1] == "RUINED"
     assert len(result["surplus_path"]) == result["ruin_time"]
+
+
+def test_running_past_ruin_keeps_the_ruin_time_and_the_full_loss(golden_ruin_config):
+    cfg = golden_ruin_config.model_copy(deep=True)
+    cfg.ruin.initial_buffer = 1.0
+    cfg.disruption_field.shock_arrival_rate *= 3
+    stopped = run_trajectory(cfg, seed=1, max_steps=300, store_qdot_snapshots=False)
+    full = run_trajectory(
+        cfg, seed=1, max_steps=300, store_qdot_snapshots=False, stop_at_ruin=False
+    )
+    assert stopped["ruined"] and full["ruined"]
+    assert full["ruin_time"] == stopped["ruin_time"] < 300
+    assert len(full["surplus_path"]) == 300
+    assert full["cumulative_loss"] >= stopped["cumulative_loss"]
+    assert full["surplus_path"][: stopped["ruin_time"]] == stopped["surplus_path"]
+    assert set(full["d_state_path"][stopped["ruin_time"] - 1 :]) == {"RUINED"}
+    assert full["min_surplus"] == pytest.approx(min(full["surplus_path"]))
+
+
+def test_loss_by_type_adds_up(golden_ruin_config):
+    cfg = golden_ruin_config.model_copy(deep=True)
+    cfg.disruption_field.shock_arrival_rate *= 3
+    result = run_trajectory(cfg, seed=4, max_steps=200, store_qdot_snapshots=False)
+    assert set(result["loss_by_type"]) == {"STANDARD", "EXPRESS", "BULKY"}
+    assert result["cumulative_loss"] > 0
+    assert sum(result["loss_by_type"].values()) == pytest.approx(
+        result["cumulative_loss"], abs=1e-3
+    )

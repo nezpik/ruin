@@ -58,9 +58,9 @@ probability_square:
   snapshot_interval: 1
   initial_d_state: stable
   d_state_thresholds:
-    stressed_chaos_pressure: 0.12
-    disrupted_chaos_pressure: 0.20
-    chaotic_chaos_pressure: 0.30
+    stressed_chaos_pressure: 0.20
+    disrupted_chaos_pressure: 0.27
+    chaotic_chaos_pressure: 0.34
     recovering_decay_ratio: 0.05
   order_pressure_weight: 1.0
   chaos_pressure_weight: 1.0
@@ -75,7 +75,7 @@ disruption_field:
     - weather_cell
     - failed_handoff
     - demand_burst
-  mean_initial_intensity: 300.0 # a cell is fully blocked at intensity 5
+  mean_initial_intensity: 285.0 # a cell is fully blocked at intensity 5
   propagation_radius: 2
   propagation_decay: 0.55
   propagation_share: 0.4        # share of surviving intensity that spreads
@@ -118,19 +118,30 @@ visualization:
   penalty, speed, and on-time completion reward. New arrivals use the same mix.
 - `processes` defines demand arrivals and the jump-diffusion that moves each
   Q dot toward its destination.
-- `probability_square` defines the D-state thresholds on chaos pressure and how
-  strongly late or failed Q dots feed back into the field.
+- `probability_square` defines the D-state thresholds on chaos pressure, how
+  strongly late or failed Q dots feed back into the field, the background risk
+  in every cell, how long cells remember stalled Q dots (`congestion_memory`),
+  what happens to disruption at the edge of `D` (`boundary_mode`), and how
+  often heavy snapshots are kept.
 - `disruption_field` defines shock arrivals, spread, and decay. The field is
   subcritical by construction: `memory_weight * (1 - temporal_decay -
   recovery_rate)` must be below 1, so every shock eventually fades.
 - `ruin` defines the surplus buffer, the barrier, the SLA threshold, and which
   rule applies (`surplus_or_sla`, `surplus`, or `sla`).
 - `risk` defines the Monte Carlo path count and confidence level.
+- `visualization` defines what the GIF shows: the heatmap quantity
+  (`disruption_intensity`, `chaos_pressure`, or `order_pressure`), the number
+  of frames spread over the shift, and which overlays are drawn.
 
-## Keys that are accepted but not yet used by the engine
+## Keys that are accepted but reserved
 
-`simulation.dt` (leave at 1), `qdots.initial_distribution`,
-`probability_square.base_risk_intensity`, `congestion_memory`, `boundary_mode`,
-`snapshot_interval`, `order_pressure_weight`, `chaos_pressure_weight`,
-`disruption_field.shock_types`, the `risk.report_*` flags, and everything under
-`visualization`.
+These are validated but do not change anything yet:
+
+- `qdots.initial_distribution`: only `uniform` exists.
+- `probability_square.order_pressure_weight`, `chaos_pressure_weight`: no
+  current formula uses a weight; the D-state thresholds already set the scale.
+- `disruption_field.shock_types`: reserved for shock attribution.
+- `risk.report_*`: every statistic is always reported.
+- `visualization.enabled`: the `--visualize` flag decides.
+
+`simulation.dt` must be 1: one step is one unit of time.

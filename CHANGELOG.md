@@ -7,6 +7,87 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.0] - 2026-11
+
+**Validation**: the risk layer now agrees with classical ruin theory, every
+headline number carries a confidence interval, and the checks run in CI.
+
+### Added
+
+- **Cramér-Lundberg validation** (`ruin/risk/classical.py`, `ruin validate`).
+  With the grid stripped away, the surplus process fed by a constant premium
+  and compound Poisson exponential claims has a closed-form ruin probability.
+  An exact event-driven simulation reproduces it at four surplus levels
+  (for example exact 0.3423, estimated 0.3400 from 20,000 paths), and RUIN's
+  own `NetworkSurplus`, stepped in time, converges to the same value.
+- **Wilson interval** for ruin probability, replacing the bootstrap interval
+  that collapsed to zero width whenever no path (or every path) ruined.
+- **Bootstrap intervals** for mean loss, VaR, and Expected Shortfall
+  (`mean_loss_ci`, `value_at_risk_ci`, `expected_shortfall_ci`).
+- `loss_by_type` / `loss_share_by_type`, `min_surplus` / `mean_min_surplus`.
+- `run_trajectory(..., stop_at_ruin=False)` to run a shift to its horizon.
+- **Continuous integration** (`.github/workflows/ci.yml`): ruff lint and
+  format, mypy, tests, and `ruin validate` on Python 3.11 and 3.13.
+- Config keys that now do something:
+  - `probability_square.boundary_mode`: what happens to disruption spreading
+    past the edge of `D`. `reflect` (default) folds it back so disruption,
+    like Q dots, cannot leave the frame; `wrap` makes the grid a torus;
+    `absorb` loses it (the 0.4.0 behaviour).
+  - `probability_square.base_risk_intensity`: background disruption in every cell.
+  - `probability_square.congestion_memory`: each cell remembers the share of
+    Q dots that stalled there; this is the congestion term of local chaos
+    pressure defined in `RUIN.md`.
+  - `probability_square.snapshot_interval`: keep Q-dot and field snapshots
+    every N steps.
+  - `visualization.frames`, `heatmap_field`, `show_qdot_types`,
+    `show_ruin_event`, `show_disruption_field`, `show_d_state`,
+    `show_order_chaos_pressure`. Frames are now spread over the whole
+    trajectory instead of taking the first 120.
+- Explicit ruff rule selection in `pyproject.toml`; the code base is clean
+  under ruff (lint and format) and mypy.
+
+### Changed
+
+- **Monte Carlo losses cover the whole shift.** Paths used to stop at ruin, so
+  the loss of every ruined path was capped near the buffer and VaR / Expected
+  Shortfall understated the tail. On the reference scenario Expected
+  Shortfall at 95% is about 540 measured over whole shifts.
+- **VaR** is the empirical quantile `ceil(confidence * n)`; the previous
+  index was one observation low when `confidence * n` was not an integer.
+- `simulation.dt` must be 1. It was accepted and partly ignored.
+- Reference scenario retuned for the reflecting boundary and the congestion
+  term: mean shock intensity 285, D-state thresholds 0.20 / 0.27 / 0.34.
+  1,000 paths give a ruin probability of 0.14 (95% interval 0.12 to 0.16),
+  and the grid is `STABLE` about 70% of the time on the default seed.
+- `QDotType`, `QDotStatus`, and `DState` are `StrEnum`s.
+
+### What the validation showed
+
+From 300-path sweeps around the reference scenario, changing one setting at a
+time:
+
+- **Buffer**: ruin probability falls roughly exponentially with the initial
+  buffer (0.24, 0.13, 0.06, 0.03 at 60, 120, 200, 300), the shape classical
+  ruin theory predicts.
+- **Disruption level is a cliff**: half the shock rate gives 0.3% ruin, one
+  and a half times gives 90%. Time windows 10% tighter give 57%, 10% looser
+  1.3%. Parameter uncertainty dominates Monte Carlo error.
+- **Concentration matters**: the same total disruption in half as many shocks
+  of double size gives 19% ruin; in twice as many of half size, 6%.
+- **Express Q dots carry about 90% of the loss.**
+- **Q-to-D feedback is weak**: changing `qdot_feedback_weight` from 0 to 5
+  moves ruin probability from 14% to 16%, inside the noise.
+- **The SLA trigger is live only between 1% and 2%** late in-flight Q dots
+  (67% and 3% ruin as the sole rule); at the configured 5% it never fires.
+
+### Still reserved
+
+`qdots.initial_distribution`, `order_pressure_weight`, `chaos_pressure_weight`,
+`disruption_field.shock_types`, `risk.report_*`, and `visualization.enabled`
+are validated but unused.
+
+---
+
 ## [0.4.0] - 2026-11
 
 **Model validity**: ruin is now a question instead of a certainty. This release

@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from enum import Enum
+from enum import StrEnum
 
 import numpy as np
 
 
-class DState(str, Enum):
+class DState(StrEnum):
     STABLE = "STABLE"
     STRESSED = "STRESSED"
     DISRUPTED = "DISRUPTED"

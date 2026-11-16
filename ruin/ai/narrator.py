@@ -181,7 +181,8 @@ def _build_trajectory_facts(result: dict[str, Any], config: ConfigLike) -> str:
         f"cumulative_income={result.get('cumulative_income')} "
         f"qdots: spawned={result.get('spawned')} delivered_on_time={result.get('delivered')} "
         f"delivered_late={result.get('delivered_late')} failed={result.get('failed')} "
-        f"on_time_rate={result.get('on_time_rate')}"
+        f"on_time_rate={result.get('on_time_rate')}\n"
+        f"min_surplus={result.get('min_surplus')} loss_by_type={result.get('loss_by_type')}"
     )
     paths = "\n".join(
         _summarize_path(result.get(key, []), label)
@@ -231,17 +232,25 @@ def _build_risk_facts(result: dict[str, Any], config: ConfigLike) -> str:
     stats = (
         f"paths={result.get('paths')} confidence_level={result.get('confidence_level')}\n"
         f"ruin_probability={result.get('ruin_probability')} "
-        f"(bootstrap CI {result.get('ruin_probability_ci')}) "
+        f"(Wilson CI {result.get('ruin_probability_ci')}) "
         f"ruin_by_surplus={result.get('ruin_by_surplus')} ruin_by_sla={result.get('ruin_by_sla')}\n"
         f"mean_final_surplus={result.get('mean_final_surplus')} "
         f"mean_on_time_rate={result.get('mean_on_time_rate')}\n"
-        f"mean_loss={result.get('mean_loss')} loss_std={result.get('loss_std')}\n"
-        f"value_at_risk={result.get('value_at_risk')} "
-        f"expected_shortfall={result.get('expected_shortfall')}\n"
+        f"mean_loss={result.get('mean_loss')} (CI {result.get('mean_loss_ci')}) "
+        f"loss_std={result.get('loss_std')}\n"
+        f"value_at_risk={result.get('value_at_risk')} (CI {result.get('value_at_risk_ci')}) "
+        f"expected_shortfall={result.get('expected_shortfall')} "
+        f"(CI {result.get('expected_shortfall_ci')})\n"
+        f"losses cover the whole shift (paths run on after ruin); "
+        f"loss_share_by_type={result.get('loss_share_by_type')} "
+        f"mean_min_surplus={result.get('mean_min_surplus')}\n"
         f"time_to_ruin: {ttr_summary}"
     )
 
-    return f"## Scenario configuration\n{_build_config_summary(config)}\n\n## Monte Carlo risk result\n{stats}"
+    return (
+        f"## Scenario configuration\n{_build_config_summary(config)}\n\n"
+        f"## Monte Carlo risk result\n{stats}"
+    )
 
 
 def _build_risk_prompt(facts: str) -> str:

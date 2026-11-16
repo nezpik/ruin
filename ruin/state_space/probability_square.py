@@ -6,8 +6,8 @@ import numpy as np
 
 from ruin.config import ConfigLike, as_config
 from ruin.core.processes import (
-    EXPOSURE_SATURATION,
     batch_qdot_travel_step,
+    blocked_fraction,
     make_rng,
     sample_shock_events,
 )
@@ -51,6 +51,11 @@ class ProbabilitySquare:
         self.d_state = DState(square.initial_d_state.upper())
         self.thresholds = square.d_state_thresholds
         self.qdot_feedback_weight = float(square.qdot_feedback_weight)
+        self.base_risk = float(square.base_risk_intensity)
+        self.congestion_memory = float(square.congestion_memory)
+        self.snapshot_interval = int(square.snapshot_interval)
+        # Per-cell memory of where Q dots have recently stalled, in [0, 1].
+        self.congestion = np.zeros(self.width * self.height, dtype=float)
 
         field_cfg = cfg.disruption_field
         self.field = DisruptionField(
@@ -62,6 +67,7 @@ class ProbabilitySquare:
             field_cfg.temporal_decay,
             field_cfg.recovery_rate,
             field_cfg.propagation_share,
+            square.boundary_mode,
         )
 
         qdots = cfg.qdots
@@ -221,8 +227,8 @@ class ProbabilitySquare:
 
         # 3. Q dots move toward their destinations through the field.
         self._exposure = (
-            self.field.exposure_at(self._x, self._y) * field_cfg.qdot_exposure_multiplier
-        )
+            self.field.exposure_at(self._x, self._y) + self.base_risk
+        ) * field_cfg.qdot_exposure_multiplier
         was_late = self._late.copy()
         self._x, self._y, self._carry, moved, arrived = batch_qdot_travel_step(
             self._x,
@@ -252,12 +258,13 @@ class ProbabilitySquare:
         income = float(self._reward[self._type[on_time]].sum())
         accruing = self._late & travelling
         # A late dot costs its delay penalty each step, up to double in a fully blocked cell.
-        blocked_here = (
-            np.clip(self._exposure[accruing], 0.0, EXPOSURE_SATURATION) / EXPOSURE_SATURATION
+        accrued = (
+            self._delay_penalty[self._type[accruing]]
+            * dt
+            * (1.0 + blocked_fraction(self._exposure[accruing]))
         )
-        penalty = float(
-            (self._delay_penalty[self._type[accruing]] * dt * (1.0 + blocked_here)).sum()
-        )
+        penalty = float(accrued.sum())
+        penalty_by_type = np.bincount(self._type[accruing], weights=accrued, minlength=3)
 
         # 5. Q dots reshape D: lateness and failure add local disruption.
         feedback = newly_late | failed
@@ -274,8 +281,16 @@ class ProbabilitySquare:
         moving_cells = self._cell_counts(moved & in_flight)
         late_cells = self._cell_counts(self._late & in_flight)
 
-        blocked = np.clip(self.field.grid.ravel(), 0.0, EXPOSURE_SATURATION) / EXPOSURE_SATURATION
-        local_chaos = blocked + late_cells / np.maximum(active_cells, 1)
+        # Congestion memory: an exponentially weighted record of the share of
+        # Q dots in each cell that failed to move.
+        stalled_share = (active_cells - moving_cells) / np.maximum(active_cells, 1)
+        self.congestion = (
+            self.congestion_memory * self.congestion
+            + (1.0 - self.congestion_memory) * stalled_share
+        )
+
+        blocked = blocked_fraction(self.field.grid.ravel() + self.base_risk)
+        local_chaos = blocked + self.congestion + late_cells / np.maximum(active_cells, 1)
         local_order = np.maximum(0, active_cells + moving_cells - late_cells)
         self._order = local_order[self._y * self.width + self._x].astype(float)
 
@@ -306,6 +321,7 @@ class ProbabilitySquare:
             "chaos_pressure": round(self.global_chaos_pressure, 6),
             "order_pressure": round(self.global_order_pressure, 6),
             "penalty": round(penalty, 6),
+            "penalty_by_type": [round(float(v), 6) for v in penalty_by_type],
             "income": round(income, 6),
             "late_count": late_count,
             "active_count": active_count,
@@ -314,10 +330,14 @@ class ProbabilitySquare:
             "failed": n_failed,
             "field_mean": round(float(self.field.grid.mean()), 6),
         }
-        if self.store_qdot_snapshots:
-            snapshot["qdots"] = [q.snapshot() for q in self._records(arrived, failed)]
-        if self.store_field_snapshots:
-            snapshot["field"] = self.field.snapshot()
+        if self.time % self.snapshot_interval == 0:
+            if self.store_qdot_snapshots:
+                snapshot["qdots"] = [q.snapshot() for q in self._records(arrived, failed)]
+            if self.store_field_snapshots:
+                shape = (self.height, self.width)
+                snapshot["field"] = self.field.snapshot()
+                snapshot["chaos_field"] = np.round(local_chaos.reshape(shape), 4).tolist()
+                snapshot["order_field"] = local_order.reshape(shape).tolist()
         self.snapshots.append(snapshot)
 
         self._keep(in_flight)

@@ -1,8 +1,8 @@
 """RUIN visualization.
 
 - Legacy text frame exporter
-- Matplotlib animation of Probability Square + Disruption Field (GIF export)
-  Now supports real field grids when store_field_snapshots=True
+- Matplotlib animation of the Probability Square (GIF export), driven by the
+  `visualization` section of the config
 """
 
 from __future__ import annotations
@@ -36,11 +36,13 @@ def save_text_frames(result: dict[str, Any], output: str | Path, limit: int = 10
 
     for snapshot in selected:
         lines.append(
-            f"t={snapshot['time']} D={snapshot['d_state']} chaos={snapshot['chaos_pressure']} order={snapshot['order_pressure']} penalty={snapshot['penalty']}"
+            f"t={snapshot['time']} D={snapshot['d_state']} chaos={snapshot['chaos_pressure']} "
+            f"order={snapshot['order_pressure']} penalty={snapshot['penalty']}"
         )
         lines.append(
             f"  active={snapshot['active_count']} late={snapshot['late_count']} "
-            f"delivered={snapshot.get('delivered', 0)} delivered_late={snapshot.get('delivered_late', 0)} "
+            f"delivered={snapshot.get('delivered', 0)} "
+            f"delivered_late={snapshot.get('delivered_late', 0)} "
             f"failed={snapshot.get('failed', 0)} income={snapshot.get('income', 0.0)}"
         )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -51,6 +53,38 @@ def _extract_grid_dims(config: ConfigLike) -> tuple[int, int]:
     return int(sim.grid_width), int(sim.grid_height)
 
 
+# What each `visualization.heatmap_field` option draws: snapshot key, label, colour scale.
+_HEATMAPS: dict[str, tuple[str, str, float | None]] = {
+    "disruption_intensity": ("field", "Disruption intensity", EXPOSURE_SATURATION),
+    "chaos_pressure": ("chaos_field", "Local chaos pressure", 2.0),
+    "order_pressure": ("order_field", "Local order pressure", None),
+}
+
+_TYPE_COLORS = {"STANDARD": "white", "EXPRESS": "cyan", "BULKY": "orange"}
+
+
+def _qdot_color(q: dict[str, Any], show_types: bool) -> str:
+    status = q.get("status", "ACTIVE")
+    if q.get("ruined") or status == "FAILED":
+        return "red"
+    if status in ("DELIVERED", "DELIVERED_LATE"):
+        return "lime"
+    if q.get("late"):
+        return "magenta"
+    if not show_types:
+        return "white"
+    return _TYPE_COLORS.get(str(q.get("type", "STANDARD")).upper(), "white")
+
+
+def _select_frames(snapshots: list[dict[str, Any]], max_frames: int) -> list[dict[str, Any]]:
+    """Pick at most `max_frames` snapshots spread evenly over the whole trajectory."""
+    drawable = [s for s in snapshots if "qdots" in s or "field" in s] or snapshots
+    if len(drawable) <= max_frames:
+        return drawable
+    picks = np.linspace(0, len(drawable) - 1, max_frames).round().astype(int)
+    return [drawable[i] for i in picks]
+
+
 def animate_probability_square(
     result: dict[str, Any],
     config: ConfigLike,
@@ -59,22 +93,29 @@ def animate_probability_square(
     dpi: int = 90,
     max_frames: int | None = None,
 ) -> Path:
-    """
-    Create an animated GIF of the Probability Square + real Disruption Field.
+    """Create an animated GIF of the Probability Square.
 
-    If snapshots contain "field" (list of lists), it uses the actual data.
-    Otherwise falls back to synthetic field.
+    What is drawn follows the `visualization` section of the config: which
+    per-cell quantity the heatmap shows, how many frames are rendered (spread
+    evenly over the trajectory), and whether Q-dot types, the D-state, the
+    pressures, and the ruin event are shown. `max_frames` overrides
+    `visualization.frames`. The heatmap needs a trajectory run with
+    `store_field_snapshots=True`.
     """
     output_path = Path(output)
+    cfg = as_config(config)
+    viz = cfg.visualization
     snapshots = result.get("snapshots", [])
     if not snapshots:
         raise ValueError("No snapshots found in trajectory result")
+    frames = _select_frames(snapshots, max_frames if max_frames is not None else viz.frames)
 
-    if max_frames is not None:
-        snapshots = snapshots[:max_frames]
-
-    # v0.2: support both dict and RuinConfig
-    width, height = _extract_grid_dims(config)
+    width, height = _extract_grid_dims(cfg)
+    heat_key, heat_label, heat_max = _HEATMAPS[viz.heatmap_field]
+    show_heatmap = viz.show_disruption_field and any(heat_key in s for s in frames)
+    if show_heatmap and heat_max is None:
+        heat_max = max(1.0, max(np.max(s[heat_key]) for s in frames if heat_key in s))
+    ruin_time = result.get("ruin_time")
 
     fig, ax = plt.subplots(figsize=(8, 6), facecolor="#111111")
     ax.set_facecolor("#111111")
@@ -88,128 +129,72 @@ def animate_probability_square(
         spine.set_color("#444444")
     ax.tick_params(colors="#888888")
 
+    blank = np.zeros((height, width))
     field_img = ax.imshow(
-        np.zeros((height, width)),
-        cmap="inferno",
-        origin="lower",
-        vmin=0,
-        vmax=EXPOSURE_SATURATION,
-        interpolation="nearest",
+        blank, cmap="inferno", origin="lower", vmin=0, vmax=heat_max or 1.0, interpolation="nearest"
     )
-    plt.colorbar(field_img, ax=ax, label="Disruption Intensity", shrink=0.8)
+    if show_heatmap:
+        colorbar = plt.colorbar(field_img, ax=ax, shrink=0.8)
+        colorbar.set_label(heat_label, color="#cccccc")
+        colorbar.ax.tick_params(colors="#888888")
 
     scatter = ax.scatter([], [], s=22, edgecolors="#222222", linewidths=0.4)
 
-    time_text = ax.text(
-        0.02,
-        0.98,
-        "",
-        transform=ax.transAxes,
-        color="white",
-        fontsize=10,
-        va="top",
-        fontfamily="monospace",
-    )
+    text_kw: dict[str, Any] = {"transform": ax.transAxes, "fontfamily": "monospace"}
+    time_text = ax.text(0.02, 0.98, "", color="white", fontsize=10, va="top", **text_kw)
     state_text = ax.text(
         0.98,
         0.98,
         "",
-        transform=ax.transAxes,
         color="#ffcc00",
         fontsize=11,
         va="top",
         ha="right",
         fontweight="bold",
+        **text_kw,
     )
-    pressure_text = ax.text(
-        0.02,
-        0.02,
+    pressure_text = ax.text(0.02, 0.02, "", color="#88ff88", fontsize=9, va="bottom", **text_kw)
+    ruin_text = ax.text(
+        0.5,
+        0.5,
         "",
-        transform=ax.transAxes,
-        color="#88ff88",
-        fontsize=9,
-        va="bottom",
-        fontfamily="monospace",
+        color="#ff3333",
+        fontsize=20,
+        va="center",
+        ha="center",
+        fontweight="bold",
+        **text_kw,
     )
-
-    def init() -> tuple[Any, ...]:
-        scatter.set_offsets(np.empty((0, 2)))
-        time_text.set_text("")
-        state_text.set_text("")
-        pressure_text.set_text("")
-        field_img.set_data(np.zeros((height, width)))
-        return field_img, scatter, time_text, state_text, pressure_text
+    artists = (field_img, scatter, time_text, state_text, pressure_text, ruin_text)
 
     def update(frame_idx: int) -> tuple[Any, ...]:
-        snap = snapshots[frame_idx]
-        t = snap["time"]
-        d_state = snap["d_state"]
-        chaos = snap.get("chaos_pressure", 0.0)
-        order = snap.get("order_pressure", 0.0)
+        snap = frames[frame_idx]
 
-        # Use real field if stored, else synthetic
-        if snap.get("field"):
-            field = np.array(snap["field"], dtype=float)
-        else:
-            mean_int = snap.get("field_intensity_mean", 0.5)
-            field = np.random.default_rng(42).normal(mean_int, 0.8, (height, width))
-            field = np.clip(field, 0, None)
-
-        field_img.set_data(field)
+        if show_heatmap and heat_key in snap:
+            field_img.set_data(np.array(snap[heat_key], dtype=float))
 
         qdots = snap.get("qdots", [])
         if qdots:
-            xs = []
-            ys = []
-            for q in qdots:
-                pos = q.get("position")
-                if isinstance(pos, (list, tuple)) and len(pos) == 2:
-                    xs.append(pos[0])
-                    ys.append(pos[1])
-                else:
-                    xs.append(q.get("x", 0))
-                    ys.append(q.get("y", 0))
-            colors = []
-            for q in qdots:
-                status = q.get("status", "ACTIVE")
-                if q.get("ruined") or status == "FAILED":
-                    colors.append("red")
-                elif status in ("DELIVERED", "DELIVERED_LATE"):
-                    colors.append("lime")
-                elif q.get("late"):
-                    colors.append("magenta")
-                else:
-                    qtype = str(q.get("type", "STANDARD")).upper()
-                    if qtype == "EXPRESS":
-                        colors.append("cyan")
-                    elif qtype == "BULKY":
-                        colors.append("orange")
-                    else:
-                        colors.append("white")
-            scatter.set_offsets(list(zip(xs, ys)))
-            scatter.set_facecolor(colors)
+            scatter.set_offsets([q["position"] for q in qdots])
+            scatter.set_facecolor([_qdot_color(q, viz.show_qdot_types) for q in qdots])
         else:
             scatter.set_offsets(np.empty((0, 2)))
 
-        time_text.set_text(f"t = {t}")
-        state_text.set_text(f"D = {d_state}")
-        pressure_text.set_text(f"chaos={chaos:.2f}  order={order:.2f}")
+        time_text.set_text(f"t = {snap['time']}")
+        if viz.show_d_state:
+            state_text.set_text(f"D = {snap['d_state']}")
+        if viz.show_order_chaos_pressure:
+            pressure_text.set_text(
+                f"chaos={snap.get('chaos_pressure', 0.0):.2f}  "
+                f"order={snap.get('order_pressure', 0.0):.2f}"
+            )
+        if viz.show_ruin_event and ruin_time is not None and snap["time"] >= ruin_time:
+            ruin_text.set_text(f"RUIN at t = {ruin_time}\n({result.get('ruin_reason')})")
+        return artists
 
-        return field_img, scatter, time_text, state_text, pressure_text
-
-    anim = FuncAnimation(
-        fig,
-        update,
-        frames=len(snapshots),
-        init_func=init,
-        interval=1000 / fps,
-        blit=False,
-    )
-
-    writer = PillowWriter(fps=fps)
-    anim.save(output_path, writer=writer, dpi=dpi)
+    anim = FuncAnimation(fig, update, frames=len(frames), interval=1000 / fps, blit=False)
+    anim.save(output_path, writer=PillowWriter(fps=fps), dpi=dpi)
     plt.close(fig)
-
     return output_path
 
 
@@ -221,7 +206,7 @@ def save_field_gif(
     dpi: int = 90,
     max_frames: int | None = None,
 ) -> Path:
-    """Convenience wrapper around animate_probability_square for real-field GIFs."""
+    """Convenience wrapper around `animate_probability_square`."""
     return animate_probability_square(
         result, config, output, fps=fps, dpi=dpi, max_frames=max_frames
     )

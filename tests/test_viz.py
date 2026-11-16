@@ -48,3 +48,28 @@ def test_save_field_gif_with_real_field(small_ruin_config):
         )
         assert gif_path.exists()
         assert gif_path.stat().st_size > 50_000  # larger because real data
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("heatmap", ["chaos_pressure", "order_pressure"])
+def test_gif_follows_visualization_config(small_ruin_config, heatmap, tmp_path):
+    from PIL import Image
+
+    cfg = small_ruin_config.model_copy(deep=True)
+    cfg.visualization.heatmap_field = heatmap
+    cfg.visualization.frames = 6
+    cfg.visualization.show_qdot_types = False
+    cfg.visualization.show_d_state = False
+    result = run_trajectory(cfg, seed=42, max_steps=30, store_field_snapshots=True)
+    out = save_field_gif(result, cfg, output=tmp_path / "viz.gif", fps=6)
+    with Image.open(out) as gif:
+        assert gif.n_frames == 6  # spread over the trajectory, not just the first frames
+
+
+def test_frame_selection_spans_the_trajectory():
+    from ruin.viz.square import _select_frames
+
+    snapshots = [{"time": t, "qdots": []} for t in range(1, 101)]
+    picked = [s["time"] for s in _select_frames(snapshots, 5)]
+    assert picked[0] == 1 and picked[-1] == 100 and len(picked) == 5
+    assert _select_frames(snapshots[:3], 5) == snapshots[:3]

@@ -51,9 +51,9 @@ probability_square:
   snapshot_interval: 1
   initial_d_state: stable
   d_state_thresholds:
-    stressed_chaos_pressure: 0.12
-    disrupted_chaos_pressure: 0.20
-    chaotic_chaos_pressure: 0.30
+    stressed_chaos_pressure: 0.20
+    disrupted_chaos_pressure: 0.27
+    chaotic_chaos_pressure: 0.34
     recovering_decay_ratio: 0.05
   order_pressure_weight: 1.0
   chaos_pressure_weight: 1.0
@@ -68,7 +68,7 @@ disruption_field:
     - weather_cell
     - failed_handoff
     - demand_burst
-  mean_initial_intensity: 300.0 # a cell is fully blocked at intensity 5
+  mean_initial_intensity: 285.0 # a cell is fully blocked at intensity 5
   propagation_radius: 2
   propagation_decay: 0.55
   propagation_share: 0.4        # share of surviving intensity that spreads

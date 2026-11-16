@@ -4,11 +4,11 @@
 
 [![Python](https://img.shields.io/badge/Python-3.11--3.14-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![v0.2 Foundation Hardening](https://img.shields.io/badge/Version-v0.2%20Foundation-green.svg)](https://github.com/nezpik/ruin)
+[![v0.5.0](https://img.shields.io/badge/Version-v0.5.0-green.svg)](https://github.com/nezpik/ruin)
 
 RUIN is a framework for measuring and visualizing logistics systems as stochastic risk-bearing portfolios. It translates quantitative finance concepts such as Cramér-Lundberg ruin theory, jump diffusion, geometric Brownian motion, Monte Carlo paths, VaR, and Expected Shortfall into a logistics language built around physical uncertainty, service failure, and systemic collapse.
 
-> **v0.2 Status**: The core simulation engine, vectorized primitives, typed configuration, parallel risk analysis, and real-field visualization have been hardened. The conceptual foundation in this document remains the north star.
+> **Status (v0.5)**: This document is the conceptual foundation and north star. The engine now implements it with completable Q dots, a decaying disruption field, and a risk layer validated against classical ruin theory. Where the implemented formulas differ from the first sketches below, the section "Formulas as implemented" says how.
 
 The central object is the **Probability Square**: an abstract two-dimensional destiny frame `D` where many **Q dots** move through possible physical futures. RUIN is not trying to make logistics look deterministic, and it is not trying to predict destiny perfectly. RUIN frames chaos so that physical uncertainty can move, take shape, and become measurable.
 
@@ -287,6 +287,27 @@ Suggested D-state rule:
 | otherwise | `STABLE` |
 
 These formulas are not final theory. They are v0.1 scaffolding: simple enough to implement, inspect, and replace later.
+
+### Formulas as implemented (v0.5)
+
+The scaffolding above has been kept in spirit and made bounded and measurable:
+
+```text
+blocked(cell, t)           = min(disruption_intensity + base_risk_intensity, 5) / 5      in [0, 1]
+congestion_memory(cell, t) = m * congestion_memory(cell, t-1)
+                           + (1 - m) * stalled_qdots(cell, t) / qdots(cell, t)           in [0, 1]
+local_chaos_pressure       = blocked + congestion_memory + late_qdots(cell) / qdots(cell)
+global_chaos_pressure      = mean(local_chaos_pressure) + late_ratio
+local_order_pressure       = max(0, qdots(cell) + moving_qdots(cell) - late_qdots(cell))
+global_order_pressure      = moving_qdots / active_qdots - late_qdots / active_qdots
+late_ratio                 = late_qdots / active_qdots        (Q dots still travelling)
+```
+
+- A cell is fully blocked at intensity 5, where travel speed falls to 5% of normal.
+- `CHAOTIC` and `DISRUPTED` are decided by thresholds first. `RECOVERING` is a sharp fall in chaos pressure from an at-least-stressed level.
+- A Q dot earns its completion reward when delivered inside its time window. Once late it costs its delay penalty every step (up to double in a fully blocked cell) until it is delivered late or abandoned.
+- `C(t)` in the surplus process is planned recovery plus completion rewards; `L(t)` is the accumulated delay penalty.
+- Disruption obeys the same frame as Q dots: with the default `reflect` boundary it cannot leave `D`.
 
 ---
 

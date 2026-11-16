@@ -5,7 +5,7 @@ from typing import Any
 from ruin.config import ConfigLike, as_config
 from ruin.core.network import NetworkSurplus
 from ruin.metrics.pressure import DState
-from ruin.state_space.probability_square import ProbabilitySquare
+from ruin.state_space.probability_square import QDOT_TYPES, ProbabilitySquare
 
 
 def run_trajectory(
@@ -14,8 +14,15 @@ def run_trajectory(
     max_steps: int | None = None,
     store_field_snapshots: bool = False,
     store_qdot_snapshots: bool = True,
+    stop_at_ruin: bool = True,
 ) -> dict[str, Any]:
-    """Run one destiny: a single shift, stopping at ruin or the horizon."""
+    """Run one destiny: a single shift.
+
+    By default the shift stops at ruin. With `stop_at_ruin=False` it runs to
+    the horizon regardless: `ruin_time` still records the first barrier
+    breach, the D-state stays RUINED from then on, and the loss figures cover
+    the whole shift instead of being cut off at the moment of ruin.
+    """
     cfg = as_config(config)
     ruin_cfg = cfg.ruin
     horizon = int(max_steps if max_steps is not None else cfg.simulation.shift_duration)
@@ -34,8 +41,10 @@ def run_trajectory(
         rule=ruin_cfg.rule,
     )
 
+    loss_by_type = [0.0, 0.0, 0.0]
     for time in range(1, horizon + 1):
-        snapshot = square.step()
+        was_ruined = network.ruined
+        snapshot = square.step(system_ruined=was_ruined)
         network.update(
             time,
             float(snapshot["penalty"]),
@@ -43,10 +52,13 @@ def run_trajectory(
             int(snapshot["active_count"]),
             income=float(snapshot["income"]),
         )
-        if network.ruined:
+        for i, value in enumerate(snapshot["penalty_by_type"]):
+            loss_by_type[i] += value
+        if network.ruined and not was_ruined:
             square.d_state = DState.RUINED
             snapshot["d_state"] = DState.RUINED.value
-            break
+            if stop_at_ruin:
+                break
 
     terminated = square.delivered + square.delivered_late + square.failed
     return {
@@ -56,6 +68,11 @@ def run_trajectory(
         "cumulative_loss": round(network.cumulative_loss, 6),
         "cumulative_income": round(network.cumulative_income, 6),
         "final_surplus": round(network.surplus, 6),
+        "min_surplus": round(min(network.surplus_path), 6) if network.surplus_path else None,
+        "loss_by_type": {
+            qtype.value: round(loss, 6)
+            for qtype, loss in zip(QDOT_TYPES, loss_by_type, strict=True)
+        },
         "final_d_state": square.d_state.value,
         "spawned": square.spawned,
         "delivered": square.delivered,
