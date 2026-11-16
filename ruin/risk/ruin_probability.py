@@ -1,31 +1,30 @@
-"""RUIN risk analysis (v0.2).
-
-Monte Carlo ruin probability estimation with improved statistics and parallel execution.
-"""
+"""RUIN risk analysis: Monte Carlo ruin probability and tail-loss statistics."""
 
 from __future__ import annotations
 
 import os
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor
 from statistics import mean, stdev
-from typing import Any, Union
+from typing import Any
 
 import numpy as np
 
-from ruin.config import to_dict
+from ruin.config import ConfigLike, as_config
 from ruin.config_models import RuinConfig
 from ruin.simulation.agent_based import run_trajectory
 
+_PATH_FIELDS = ("ruined", "ruin_time", "ruin_reason", "cumulative_loss", "final_surplus", "on_time_rate")
 
-ConfigLike = Union[dict[str, Any], RuinConfig]
 
-
-def _run_one_path(config: ConfigLike, seed: int, max_steps: int | None) -> dict[str, Any]:
+def _run_one_path(args: tuple[RuinConfig, int, int | None]) -> dict[str, Any]:
     """Top-level worker for parallel Monte Carlo (must be picklable).
 
-    v0.2: Pass original ConfigLike (Pydantic model or dict) directly downstream.
+    Returns only the per-path summary, so workers do not ship whole
+    trajectories back to the parent process.
     """
-    return run_trajectory(config, seed=seed, max_steps=max_steps)
+    config, seed, max_steps = args
+    result = run_trajectory(config, seed=seed, max_steps=max_steps, store_qdot_snapshots=False)
+    return {key: result[key] for key in _PATH_FIELDS}
 
 
 def value_at_risk(losses: list[float], confidence: float) -> float:
@@ -79,57 +78,36 @@ def run_monte_carlo(
     ci_boot: int = 2000,
     n_jobs: int | None = None,
 ) -> dict[str, Any]:
-    """Run Monte Carlo simulation (parallelized) and return enriched ruin-risk statistics.
+    """Run many destinies (path i uses seed + i) and return ruin-risk statistics."""
+    cfg = as_config(config)
+    n_paths = int(paths if paths is not None else cfg.risk.monte_carlo_paths)
+    level = float(confidence if confidence is not None else cfg.risk.confidence_level)
+    base_seed = int(cfg.simulation.seed)
 
-    v0.2: Prefers direct Pydantic attributes when RuinConfig is passed.
-    """
-    # v0.2: prefer Pydantic attributes
-    if isinstance(config, RuinConfig):
-        risk_cfg = config.risk
-        sim = config.simulation
-
-        n_paths = int(paths if paths is not None else risk_cfg.monte_carlo_paths)
-        level = float(confidence if confidence is not None else risk_cfg.confidence_level)
-        base_seed = int(sim.seed)
-    else:
-        cfg = to_dict(config)
-        risk_config = cfg.get("risk", {})
-        simulation = cfg["simulation"]
-
-        n_paths = int(paths if paths is not None else risk_config.get("monte_carlo_paths", 1000))
-        level = float(confidence if confidence is not None else risk_config.get("confidence_level", 0.95))
-        base_seed = int(simulation.get("seed", 42))
-
-    # Determine parallelism - use all available cores by default
     cpu = os.cpu_count() or 4
     if n_jobs is None:
         n_jobs = min(cpu, n_paths)
     n_jobs = max(1, min(n_jobs, n_paths))
 
-    # Parallel execution
-    results: list[dict[str, Any]] = []
-    with ProcessPoolExecutor(max_workers=n_jobs) as executor:
-        futures = {
-            executor.submit(_run_one_path, config, base_seed + i, max_steps): i
-            for i in range(n_paths)
-        }
-
-        for future in as_completed(futures):
-            results.append(future.result())
+    jobs = [(cfg, base_seed + i, max_steps) for i in range(n_paths)]
+    results: list[dict[str, Any]]
+    if n_jobs == 1:
+        results = [_run_one_path(job) for job in jobs]
+    else:
+        # `map` keeps results in path order, so output never depends on
+        # which worker happens to finish first.
+        chunksize = max(1, n_paths // (n_jobs * 4))
+        with ProcessPoolExecutor(max_workers=n_jobs) as executor:
+            results = list(executor.map(_run_one_path, jobs, chunksize=chunksize))
 
     losses = [float(result["cumulative_loss"]) for result in results]
+    final_surpluses = [float(result["final_surplus"]) for result in results]
     ruined = [result for result in results if result["ruined"]]
-    ruin_times = [
-        int(result["ruin_time"]) for result in ruined if result.get("ruin_time") is not None
-    ]
+    ruin_times = [int(result["ruin_time"]) for result in ruined if result["ruin_time"] is not None]
+    on_time = [float(r["on_time_rate"]) for r in results if r["on_time_rate"] is not None]
 
     ruin_prob = len(ruined) / max(n_paths, 1)
-    mean_loss = mean(losses) if losses else 0.0
-
-    # Bootstrap CI for ruin probability (Bernoulli)
     ruin_ci = bootstrap_ci([1.0 if r["ruined"] else 0.0 for r in results], level, ci_boot)
-
-    # Basic stats
     loss_std = stdev(losses) if len(losses) > 1 else 0.0
     mean_time = mean(ruin_times) if ruin_times else None
 
@@ -137,10 +115,14 @@ def run_monte_carlo(
         "paths": n_paths,
         "ruin_probability": ruin_prob,
         "ruin_probability_ci": [round(ruin_ci[0], 4), round(ruin_ci[1], 4)],
-        "mean_loss": round(mean_loss, 4),
+        "ruin_by_surplus": sum(1 for r in ruined if r["ruin_reason"] == "surplus"),
+        "ruin_by_sla": sum(1 for r in ruined if r["ruin_reason"] == "sla"),
+        "mean_loss": round(mean(losses), 4) if losses else 0.0,
         "loss_std": round(loss_std, 4),
         "value_at_risk": round(value_at_risk(losses, level), 4),
         "expected_shortfall": round(expected_shortfall(losses, level), 4),
+        "mean_final_surplus": round(mean(final_surpluses), 4) if final_surpluses else 0.0,
+        "mean_on_time_rate": round(mean(on_time), 4) if on_time else None,
         "time_to_ruin": ruin_times[:100],  # cap for output size
         "mean_time_to_ruin": round(mean_time, 2) if mean_time is not None else None,
         "confidence_level": level,

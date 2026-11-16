@@ -1,4 +1,4 @@
-"""Tests for stochastic processes (v0.2 vectorized + legacy)."""
+"""Tests for the vectorized stochastic processes."""
 
 from __future__ import annotations
 
@@ -6,90 +6,119 @@ import numpy as np
 import pytest
 
 from ruin.core.processes import (
+    EXPOSURE_SATURATION,
+    MIN_DRAG,
+    batch_qdot_travel_step,
+    field_drag,
     make_rng,
-    sample_gbm_displacements,
     sample_compound_poisson_jumps,
-    sample_shock_arrivals,
-    sample_travel_step,
-    PoissonArrivalProcess,
-    JumpDiffusionProcess,
+    sample_gbm_displacements,
+    sample_shock_events,
 )
 
 
 def test_make_rng_reproducible():
-    rng1 = make_rng(123)
-    rng2 = make_rng(123)
-    a = rng1.standard_normal(5)
-    b = rng2.standard_normal(5)
-    np.testing.assert_array_almost_equal(a, b)
+    a = make_rng(123).standard_normal(5)
+    b = make_rng(123).standard_normal(5)
+    np.testing.assert_array_equal(a, b)
 
 
 def test_gbm_displacements_shape_and_stats():
-    rng = make_rng(42)
-    disp = sample_gbm_displacements(5000, drift=1.2, volatility=0.4, dt=1.0, rng=rng)
+    disp = sample_gbm_displacements(5000, drift=1.2, volatility=0.4, dt=1.0, rng=make_rng(42))
     assert disp.shape == (5000,)
-    assert np.all(np.isfinite(disp))
-    # Mean should be close to drift * dt
     assert abs(disp.mean() - 1.2) < 0.05
+    assert abs(disp.std() - 0.4) < 0.05
 
 
-def test_compound_poisson_jumps():
-    rng = make_rng(99)
+def test_compound_poisson_jumps_mean():
     jumps = sample_compound_poisson_jumps(
-        2000, intensity=0.08, mean_jump_size=3.0, dt=1.0, rng=rng
+        50_000, intensity=0.08, mean_jump_size=3.0, dt=1.0, rng=make_rng(99)
     )
-    assert jumps.shape == (2000,)
-    non_zero = jumps[jumps != 0]
-    if len(non_zero) > 0:
-        assert np.all(non_zero > 0)
-        assert non_zero.mean() > 1.0  # rough sanity
+    assert jumps.shape == (50_000,)
+    assert np.all(jumps >= 0)
+    # E[compound Poisson] = intensity * mean size
+    assert abs(jumps.mean() - 0.24) < 0.02
 
 
-def test_shock_arrivals_mask():
+def test_compound_poisson_rejects_unknown_distribution():
+    with pytest.raises(ValueError):
+        sample_compound_poisson_jumps(5, 0.1, 1.0, distribution="cauchy", rng=make_rng(0))
+
+
+def test_shock_events_rate_and_bounds():
     rng = make_rng(7)
-    mask = sample_shock_arrivals(300, rate=0.05, dt=1.0, rng=rng)
-    assert mask.dtype == bool
-    assert mask.shape == (300,)
-    rate_est = mask.mean()
-    assert 0.02 < rate_est < 0.08  # probabilistic band
+    counts = []
+    for _ in range(2000):
+        xs, ys, intensities = sample_shock_events(0.5, 4.0, width=6, height=9, rng=rng)
+        counts.append(len(xs))
+        assert np.all((xs >= 0) & (xs < 6))
+        assert np.all((ys >= 0) & (ys < 9))
+        assert np.all(intensities >= 0)
+    assert abs(np.mean(counts) - 0.5) < 0.06
 
 
-def test_scalar_travel_step():
-    py_rng = __import__("random").Random(42)
-    val = sample_travel_step(1.2, 0.4, 0.08, 3.0, dt=1.0, rng=py_rng)
-    assert isinstance(val, float)
-    assert np.isfinite(val)
+def test_field_drag_bounds():
+    drag = field_drag(np.array([0.0, EXPOSURE_SATURATION / 2, EXPOSURE_SATURATION, 1e6]))
+    assert drag[0] == pytest.approx(1.0)
+    assert drag[2] == pytest.approx(MIN_DRAG)
+    assert drag[3] == pytest.approx(MIN_DRAG)
+    assert np.all(np.diff(drag) <= 0)
 
 
-def test_legacy_classes_still_work():
-    py_rng = __import__("random").Random(123)
-    p = PoissonArrivalProcess(0.1, py_rng)
-    assert isinstance(p.event_occurs(dt=1.0), bool)
+def _travel(n=400, exposure=0.0, seed=1, steps=1):
+    rng = make_rng(seed)
+    x = rng.integers(0, 20, n)
+    y = rng.integers(0, 20, n)
+    dest_x = rng.integers(0, 20, n)
+    dest_y = rng.integers(0, 20, n)
+    carry = np.zeros(n)
+    start = (x.copy(), y.copy())
+    total_moved = np.zeros(n, dtype=bool)
+    arrived = np.zeros(n, dtype=bool)
+    for _ in range(steps):
+        x, y, carry, moved, arrived = batch_qdot_travel_step(
+            x, y, dest_x, dest_y, carry,
+            np.full(n, exposure), np.ones(n), np.ones(n),
+            1.2, 0.4, 0.05, 2.0, rng,
+        )
+        total_moved |= moved
+    return start, (x, y), (dest_x, dest_y), arrived
 
-    j = JumpDiffusionProcess(1.0, 0.5, 0.1, 2.0, __import__("random").Random(456))
-    jump = j.sample_jump()
-    assert isinstance(jump, float)
+
+def test_travel_never_overshoots_and_closes_distance():
+    (x0, y0), (x1, y1), (dx, dy), _ = _travel()
+    before = np.abs(dx - x0) + np.abs(dy - y0)
+    after = np.abs(dx - x1) + np.abs(dy - y1)
+    assert np.all(after <= before)
+    assert after.sum() < before.sum()
+    # Each coordinate stays between where it started and where it is going.
+    assert np.all((x1 >= np.minimum(x0, dx)) & (x1 <= np.maximum(x0, dx)))
+    assert np.all((y1 >= np.minimum(y0, dy)) & (y1 <= np.maximum(y0, dy)))
 
 
-def test_processes_with_typed_small_ruin_config(small_ruin_config):
-    """v0.2: Smoke that vectorized primitives work with direct RuinConfig attributes (no dict conversion)."""
-    cfg = small_ruin_config
+def test_travel_uses_both_axes():
+    (x0, y0), (x1, y1), _, _ = _travel(steps=3)
+    assert np.any(x1 != x0)
+    assert np.any(y1 != y0)
 
-    # Direct Pydantic attribute access (preferred path)
-    p = cfg.processes
-    sim = cfg.simulation
-    dfield = cfg.disruption_field
 
-    rng = make_rng(42)
-    disp = sample_gbm_displacements(10, p.travel_drift, p.travel_volatility, dt=1.0, rng=rng)
-    jumps = sample_compound_poisson_jumps(
-        10, p.jump_intensity, p.jump_mean_size, dt=1.0, rng=rng
+def test_travel_eventually_arrives():
+    _, _, _, arrived = _travel(steps=200)
+    assert arrived.all()
+
+
+def test_blocked_cells_slow_travel():
+    (x0, y0), (x1, y1), _, _ = _travel(steps=5, exposure=0.0)
+    free = (np.abs(x1 - x0) + np.abs(y1 - y0)).sum()
+    (x0, y0), (x1, y1), _, _ = _travel(steps=5, exposure=EXPOSURE_SATURATION)
+    blocked = (np.abs(x1 - x0) + np.abs(y1 - y0)).sum()
+    assert blocked < 0.5 * free
+
+
+def test_travel_handles_empty_population():
+    empty = np.zeros(0, dtype=int)
+    out = batch_qdot_travel_step(
+        empty, empty, empty, empty, np.zeros(0), np.zeros(0), np.zeros(0), np.zeros(0),
+        1.0, 0.3, 0.05, 2.0, make_rng(0),
     )
-
-    # Also exercise another section to prove full typed access
-    assert sim.grid_width == 8
-    assert dfield.shock_arrival_rate == 0.04
-
-    assert len(disp) == 10
-    assert len(jumps) == 10
-    assert np.all(np.isfinite(disp + jumps))
+    assert all(len(a) == 0 for a in out)

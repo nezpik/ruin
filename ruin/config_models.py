@@ -6,9 +6,9 @@ compatibility with v0.1 YAML files via dict → model_validate.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
-from typing import Literal, List
+from typing import Literal
 
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # --- Leaf / sub-models -------------------------------------------------------
 
@@ -27,9 +27,12 @@ class QDotTypeParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     time_window: float = Field(gt=0)
-    delay_penalty: float
-    drift_multiplier: float
-    volatility_multiplier: float
+    # Loss charged per step while a Q dot is late (scaled by local exposure).
+    delay_penalty: float = Field(ge=0)
+    drift_multiplier: float = Field(gt=0)
+    volatility_multiplier: float = Field(ge=0)
+    # Surplus earned when a Q dot reaches its destination on time.
+    completion_reward: float = Field(default=0.0, ge=0)
 
 
 class QDotsConfig(BaseModel):
@@ -47,12 +50,15 @@ class QDotsConfig(BaseModel):
 class ProcessesConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    # Expected number of new Q dots entering D per step (Poisson).
     demand_arrival_rate: float = Field(ge=0)
-    travel_drift: float
+    # Mean cells travelled toward the destination per step, and its volatility.
+    travel_drift: float = Field(gt=0)
     travel_volatility: float = Field(ge=0)
+    # Per-Q-dot compound Poisson setbacks: probability-rate and mean size (cells).
     jump_intensity: float = Field(ge=0)
-    jump_mean_size: float
-    jump_size_distribution: Literal["exponential", "normal"] = "exponential"
+    jump_mean_size: float = Field(ge=0)
+    jump_size_distribution: Literal["exponential"] = "exponential"
 
 
 class DStateThresholds(BaseModel):
@@ -62,6 +68,18 @@ class DStateThresholds(BaseModel):
     disrupted_chaos_pressure: float = Field(ge=0, le=1)
     chaotic_chaos_pressure: float = Field(ge=0, le=1)
     recovering_decay_ratio: float = Field(ge=0, le=1)
+
+    @model_validator(mode="after")
+    def _ordered(self) -> DStateThresholds:
+        if not (
+            self.stressed_chaos_pressure
+            <= self.disrupted_chaos_pressure
+            <= self.chaotic_chaos_pressure
+        ):
+            raise ValueError(
+                "d_state_thresholds must satisfy stressed <= disrupted <= chaotic"
+            )
+        return self
 
 
 class ProbabilitySquareConfig(BaseModel):
@@ -82,22 +100,42 @@ class DisruptionFieldConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = True
+    # Expected number of shocks hitting the whole grid per step (Poisson).
     shock_arrival_rate: float = Field(ge=0)
-    shock_types: List[str] = Field(default_factory=list)
-    mean_initial_intensity: float = 2.0
+    shock_types: list[str] = Field(default_factory=list)
+    mean_initial_intensity: float = Field(default=2.0, ge=0)
     propagation_radius: int = Field(default=2, ge=0)
     propagation_decay: float = Field(default=0.55, ge=0, le=1)
+    # Fraction of a cell's surviving intensity that moves to its neighbours each step.
+    propagation_share: float = Field(default=0.3, ge=0, le=1)
     temporal_decay: float = Field(default=0.12, ge=0, le=1)
     recovery_rate: float = Field(default=0.08, ge=0, le=1)
     memory_weight: float = Field(default=0.85, ge=0, le=1)
-    qdot_exposure_multiplier: float = 1.0
+    qdot_exposure_multiplier: float = Field(default=1.0, ge=0)
+
+    @property
+    def gain(self) -> float:
+        """Fraction of total field intensity that survives one step."""
+        return self.memory_weight * max(0.0, 1.0 - self.temporal_decay - self.recovery_rate)
+
+    @model_validator(mode="after")
+    def _subcritical(self) -> DisruptionFieldConfig:
+        if self.temporal_decay + self.recovery_rate > 1.0:
+            raise ValueError("temporal_decay + recovery_rate must not exceed 1")
+        if self.gain >= 1.0:
+            raise ValueError(
+                "disruption field would never decay: "
+                "memory_weight * (1 - temporal_decay - recovery_rate) must be < 1"
+            )
+        return self
 
 
 class RuinParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     initial_buffer: float
-    recovery_rate: float = 0.0
+    # Planned capacity recovered per step, independent of completions.
+    recovery_rate: float = Field(default=0.0, ge=0)
     barrier: float = 0.0
     sla_threshold: float = Field(default=0.12, ge=0)
     rule: Literal["surplus_or_sla", "surplus", "sla"] = "surplus_or_sla"

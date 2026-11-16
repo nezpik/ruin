@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 import argparse
-import sys
 import json
 import logging
+import sys
 from pathlib import Path
 from typing import Any
 
-from ruin.config import load_config, load_ruin_config
+from pydantic import ValidationError
+
+from ruin.config import load_ruin_config
 from ruin.config_models import RuinConfig
 from ruin.risk.ruin_probability import run_monte_carlo
 from ruin.simulation.agent_based import run_trajectory
-from ruin.viz.square import save_text_frames, save_field_gif
-
+from ruin.viz.square import save_field_gif, save_text_frames
 
 logger = logging.getLogger("ruin.cli")
 
@@ -29,6 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
     simulate.add_argument("--config", required=True)
     simulate.add_argument("--frames", type=int, default=20)
     simulate.add_argument("--max-steps", type=int, default=None)
+    simulate.add_argument("--seed", type=int, default=None, help="Override the config's seed")
     simulate.add_argument("--output", default="ruin_frames.txt")
     simulate.add_argument("--json", action="store_true")
     simulate.add_argument("--visualize", action="store_true", help="Generate animated GIF of the real disruption field + Q-dots")
@@ -69,7 +71,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _maybe_explain(
     result: dict[str, Any],
-    config: RuinConfig | dict[str, Any],
+    config: RuinConfig,
     explain_path: str | None,
     effort: str | None = None,
 ) -> None:
@@ -94,16 +96,18 @@ def main(argv: list[str] | None = None) -> int:
 
     logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout)
 
-    # Prefer validated Pydantic config (v0.2) — pass the model directly now that functions accept it
     try:
-        config: RuinConfig | dict[str, Any] = load_ruin_config(args.config)
-    except Exception:
-        config = load_config(args.config)
+        config = load_ruin_config(args.config)
+    except (OSError, ValueError, ValidationError) as exc:
+        logger.error("Invalid config %s:\n%s", args.config, exc)
+        return 2
 
     if args.command == "simulate":
         store_field = bool(args.visualize)
 
-        result = run_trajectory(config, max_steps=args.max_steps, store_field_snapshots=store_field)
+        result = run_trajectory(
+            config, seed=args.seed, max_steps=args.max_steps, store_field_snapshots=store_field
+        )
 
         save_text_frames(result, Path(args.output), limit=args.frames)
 
@@ -118,6 +122,10 @@ def main(argv: list[str] | None = None) -> int:
             "ruin_reason": result["ruin_reason"],
             "final_surplus": result["final_surplus"],
             "final_d_state": result["final_d_state"],
+            "delivered": result["delivered"],
+            "delivered_late": result["delivered_late"],
+            "failed": result["failed"],
+            "on_time_rate": result["on_time_rate"],
             "frames_written": args.output,
         }
         logger.info(json.dumps(summary if not args.json else result, indent=2))

@@ -1,5 +1,5 @@
 """RUIN AI layer — optional Codex-powered research report generation."""
 
-from .narrator import generate_report, detect_result_kind
+from .narrator import detect_result_kind, generate_report
 
-__all__ = ["generate_report", "detect_result_kind"]
+__all__ = ["detect_result_kind", "generate_report"]

@@ -8,4 +8,4 @@ repos:
     rev: v1.10.0
     hooks:
       - id: mypy
-        additional_dependencies: [pydantic>=2.10, numpy>=2.1]
+        additional_dependencies: [pydantic>=2.10, numpy>=2.1, types-PyYAML]

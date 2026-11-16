@@ -1,330 +1,309 @@
 from __future__ import annotations
 
-from random import Random
-from typing import Any, Union
+from typing import Any
 
 import numpy as np
 
-from ruin.config import to_dict
-from ruin.config_models import RuinConfig
-from ruin.core.processes import batch_qdot_travel_step, make_rng, sample_shock_arrivals
-from ruin.core.qdot import QDot, QDotType
+from ruin.config import ConfigLike, as_config
+from ruin.core.processes import (
+    EXPOSURE_SATURATION,
+    batch_qdot_travel_step,
+    make_rng,
+    sample_shock_events,
+)
+from ruin.core.qdot import QDot, QDotStatus, QDotType
 from ruin.metrics.pressure import (
     DState,
     choose_d_state,
     global_chaos_pressure,
     global_order_pressure,
-    local_chaos_pressure,
-    local_order_pressure,
 )
 from ruin.state_space.disruption_field import DisruptionField
 
-
-ConfigLike = Union[dict[str, Any], RuinConfig]
+QDOT_TYPES = (QDotType.STANDARD, QDotType.EXPRESS, QDotType.BULKY)
 
 
 class ProbabilitySquare:
+    """The destiny frame D: a grid, its disruption field, and the Q dots in it.
+
+    Q dots are held as parallel arrays. Each one enters D at an origin cell
+    with a destination and a time window, travels toward the destination,
+    and leaves D only by terminating: delivered on time, delivered late, or
+    failed (abandoned after a full extra window of lateness).
+    """
+
     def __init__(
         self,
         config: ConfigLike,
-        rng: Random | int,
+        seed: int | None = None,
         store_field_snapshots: bool = False,
+        store_qdot_snapshots: bool = True,
     ) -> None:
-        self._raw_config: ConfigLike = config
-
-        # v0.2: prefer Pydantic attributes when a validated RuinConfig is passed
-        if isinstance(config, RuinConfig):
-            sim = config.simulation
-            self.width = int(sim.grid_width)
-            self.height = int(sim.grid_height)
-        else:
-            cfg = to_dict(config)
-            simulation = cfg["simulation"]
-            self.width = int(simulation["grid_width"])
-            self.height = int(simulation["grid_height"])
-
-        # FIX: accept either Random instance (legacy) or direct int seed for true reproducibility
-        if isinstance(rng, int):
-            self.rng: Random = Random(rng)
-            self.np_rng: np.random.Generator = make_rng(rng)
-        else:
-            self.rng = rng
-            # fallback derivation (kept for backward compatibility)
-            try:
-                state = rng.getstate()
-                if isinstance(state, tuple) and len(state) > 1:
-                    seed = abs(hash(str(state[1]))) % (2**31)
-                else:
-                    seed = 42
-            except Exception:
-                seed = 42
-            self.np_rng = make_rng(seed)
-
+        cfg = as_config(config)
+        self.config = cfg
+        self.width = int(cfg.simulation.grid_width)
+        self.height = int(cfg.simulation.grid_height)
+        self.dt = float(cfg.simulation.dt)
+        self.rng = make_rng(cfg.simulation.seed if seed is None else seed)
         self.time = 0
 
-        # v0.2: extract sections with Pydantic attribute preference (and prepare qdots_cfg compat dict)
-        if isinstance(self._raw_config, RuinConfig):
-            square_cfg = self._raw_config.probability_square
-            field_cfg = self._raw_config.disruption_field
-            self.d_state = DState(str(getattr(square_cfg, "initial_d_state", "stable")).upper())
-            d_thresh = getattr(square_cfg, "d_state_thresholds", None)
-            self.thresholds = d_thresh.model_dump() if d_thresh is not None else {}
-            self.qdot_feedback_weight = float(getattr(square_cfg, "qdot_feedback_weight", 0.5))
+        square = cfg.probability_square
+        self.d_state = DState(square.initial_d_state.upper())
+        self.thresholds = square.d_state_thresholds
+        self.qdot_feedback_weight = float(square.qdot_feedback_weight)
 
-            mem_w = float(getattr(field_cfg, "memory_weight", 0.85))
-            prop_r = int(getattr(field_cfg, "propagation_radius", 2))
-            prop_d = float(getattr(field_cfg, "propagation_decay", 0.55))
-            temp_d = float(getattr(field_cfg, "temporal_decay", 0.12))
-            rec_r = float(getattr(field_cfg, "recovery_rate", 0.08))
+        field_cfg = cfg.disruption_field
+        self.field = DisruptionField(
+            self.width,
+            self.height,
+            field_cfg.memory_weight,
+            field_cfg.propagation_radius,
+            field_cfg.propagation_decay,
+            field_cfg.temporal_decay,
+            field_cfg.recovery_rate,
+            field_cfg.propagation_share,
+        )
 
-            # Build flat qdots dict for the existing creation loop (Pydantic path)
-            qdots = self._raw_config.qdots
-            qdots_cfg = {
-                "n_standard": qdots.n_standard,
-                "n_express": qdots.n_express,
-                "n_bulky": qdots.n_bulky,
-                "standard_time_window": qdots.standard.time_window,
-                "standard_delay_penalty": qdots.standard.delay_penalty,
-                "standard_drift_multiplier": qdots.standard.drift_multiplier,
-                "standard_volatility_multiplier": qdots.standard.volatility_multiplier,
-                "express_time_window": qdots.express.time_window,
-                "express_delay_penalty": qdots.express.delay_penalty,
-                "express_drift_multiplier": qdots.express.drift_multiplier,
-                "express_volatility_multiplier": qdots.express.volatility_multiplier,
-                "bulky_time_window": qdots.bulky.time_window,
-                "bulky_delay_penalty": qdots.bulky.delay_penalty,
-                "bulky_drift_multiplier": qdots.bulky.drift_multiplier,
-                "bulky_volatility_multiplier": qdots.bulky.volatility_multiplier,
-            }
-        else:
-            cfg = to_dict(config)  # only for legacy dict path
-            square = cfg["probability_square"]
-            field_config = cfg["disruption_field"]
-            self.d_state = DState(str(square.get("initial_d_state", "stable")).upper())
-            self.thresholds = square.get("d_state_thresholds", {})
-            self.qdot_feedback_weight = float(square.get("qdot_feedback_weight", 0.5))
+        qdots = cfg.qdots
+        params = (qdots.standard, qdots.express, qdots.bulky)
+        self._time_window = np.array([p.time_window for p in params], dtype=float)
+        self._delay_penalty = np.array([p.delay_penalty for p in params], dtype=float)
+        self._drift_mult = np.array([p.drift_multiplier for p in params], dtype=float)
+        self._vol_mult = np.array([p.volatility_multiplier for p in params], dtype=float)
+        self._reward = np.array([p.completion_reward for p in params], dtype=float)
 
-            mem_w = float(field_config.get("memory_weight", 0.85))
-            prop_r = int(field_config.get("propagation_radius", 2))
-            prop_d = float(field_config.get("propagation_decay", 0.55))
-            temp_d = float(field_config.get("temporal_decay", 0.12))
-            rec_r = float(field_config.get("recovery_rate", 0.08))
-
-            qdots_cfg = cfg.get("qdots", {})
+        counts = np.array([qdots.n_standard, qdots.n_express, qdots.n_bulky], dtype=int)
+        self._type_mix = counts / counts.sum() if counts.sum() > 0 else np.full(3, 1.0 / 3.0)
 
         self.previous_chaos_pressure = 0.0
         self.global_chaos_pressure = 0.0
         self.global_order_pressure = 0.0
         self.snapshots: list[dict[str, Any]] = []
-        self.max_capacity = self.width * self.height
         self.store_field_snapshots = store_field_snapshots
+        self.store_qdot_snapshots = store_qdot_snapshots
 
-        self.field = DisruptionField(
-            self.width,
-            self.height,
-            mem_w,
-            prop_r,
-            prop_d,
-            temp_d,
-            rec_r,
-            self.rng,
-            self.np_rng,
-        )
+        # Lifetime counters.
+        self.spawned = 0
+        self.delivered = 0
+        self.delivered_late = 0
+        self.failed = 0
 
-        self.qdots: list[QDot] = []
-        qid = 0
-        for qtype, count in [
-            (QDotType.STANDARD, int(qdots_cfg.get("n_standard", 120))),
-            (QDotType.EXPRESS, int(qdots_cfg.get("n_express", 40))),
-            (QDotType.BULKY, int(qdots_cfg.get("n_bulky", 40))),
-        ]:
-            for _ in range(count):
-                self.qdots.append(
-                    QDot(
-                        id=qid,
-                        type=qtype,
-                        x=self.rng.randrange(self.width),
-                        y=self.rng.randrange(self.height),
-                        time_window=float(
-                            qdots_cfg.get(f"{qtype.value.lower()}_time_window", 120 if qtype == QDotType.STANDARD else (60 if qtype == QDotType.EXPRESS else 180))
-                        ),
-                        delay_penalty=float(
-                            qdots_cfg.get(f"{qtype.value.lower()}_delay_penalty", 1.0 if qtype == QDotType.STANDARD else (2.5 if qtype == QDotType.EXPRESS else 2.0))
-                        ),
-                        drift_multiplier=float(
-                            qdots_cfg.get(f"{qtype.value.lower()}_drift_multiplier", 1.0 if qtype == QDotType.STANDARD else (1.25 if qtype == QDotType.EXPRESS else 0.7))
-                        ),
-                        volatility_multiplier=float(
-                            qdots_cfg.get(f"{qtype.value.lower()}_volatility_multiplier", 1.0 if qtype == QDotType.STANDARD else (1.2 if qtype == QDotType.EXPRESS else 0.9))
-                        ),
-                    )
+        # Q-dot state (one entry per Q dot currently inside D).
+        self._ids = np.zeros(0, dtype=int)
+        self._type = np.zeros(0, dtype=int)
+        self._x = np.zeros(0, dtype=int)
+        self._y = np.zeros(0, dtype=int)
+        self._dest_x = np.zeros(0, dtype=int)
+        self._dest_y = np.zeros(0, dtype=int)
+        self._slack = np.zeros(0, dtype=float)
+        self._carry = np.zeros(0, dtype=float)
+        self._late = np.zeros(0, dtype=bool)
+        self._exposure = np.zeros(0, dtype=float)
+        self._order = np.zeros(0, dtype=float)
+
+        self._spawn(np.repeat(np.arange(3), counts))
+        self.initial_qdots = int(counts.sum())
+
+    # ------------------------------------------------------------------ Q dots
+
+    @property
+    def active_count(self) -> int:
+        return len(self._ids)
+
+    @property
+    def qdots(self) -> list[QDot]:
+        """Q dots currently inside D, as records."""
+        return self._records(np.zeros(self.active_count, dtype=bool), np.zeros(self.active_count, dtype=bool))
+
+    def _spawn(self, types: np.ndarray) -> None:
+        n = len(types)
+        if n == 0:
+            return
+        x = self.rng.integers(0, self.width, size=n)
+        y = self.rng.integers(0, self.height, size=n)
+        dest_x = self.rng.integers(0, self.width, size=n)
+        dest_y = self.rng.integers(0, self.height, size=n)
+        if self.width > 1:
+            # A commitment must have somewhere to go.
+            same = (dest_x == x) & (dest_y == y)
+            dest_x[same] = (dest_x[same] + 1) % self.width
+
+        self._ids = np.concatenate([self._ids, np.arange(self.spawned, self.spawned + n)])
+        self._type = np.concatenate([self._type, types.astype(int)])
+        self._x = np.concatenate([self._x, x])
+        self._y = np.concatenate([self._y, y])
+        self._dest_x = np.concatenate([self._dest_x, dest_x])
+        self._dest_y = np.concatenate([self._dest_y, dest_y])
+        self._slack = np.concatenate([self._slack, self._time_window[types]])
+        self._carry = np.concatenate([self._carry, np.zeros(n)])
+        self._late = np.concatenate([self._late, np.zeros(n, dtype=bool)])
+        self._exposure = np.concatenate([self._exposure, np.zeros(n)])
+        self._order = np.concatenate([self._order, np.zeros(n)])
+        self.spawned += n
+
+    def _keep(self, mask: np.ndarray) -> None:
+        for name in (
+            "_ids", "_type", "_x", "_y", "_dest_x", "_dest_y",
+            "_slack", "_carry", "_late", "_exposure", "_order",
+        ):
+            setattr(self, name, getattr(self, name)[mask])
+
+    def _records(self, arrived: np.ndarray, failed: np.ndarray) -> list[QDot]:
+        records: list[QDot] = []
+        for i in range(len(self._ids)):
+            late = bool(self._late[i])
+            if failed[i]:
+                status = QDotStatus.FAILED
+            elif arrived[i]:
+                status = QDotStatus.DELIVERED_LATE if late else QDotStatus.DELIVERED
+            else:
+                status = QDotStatus.LATE if late else QDotStatus.ACTIVE
+            kind = int(self._type[i])
+            records.append(
+                QDot(
+                    id=int(self._ids[i]),
+                    type=QDOT_TYPES[kind],
+                    x=int(self._x[i]),
+                    y=int(self._y[i]),
+                    dest_x=int(self._dest_x[i]),
+                    dest_y=int(self._dest_y[i]),
+                    time_window=float(self._slack[i]),
+                    delay_penalty=float(self._delay_penalty[kind]),
+                    status=status,
+                    field_exposure=float(self._exposure[i]),
+                    order_pressure=float(self._order[i]),
+                    d_state_exposure=self.d_state.value,
                 )
-                qid += 1
-        self.initial_qdots = len(self.qdots)
+            )
+        return records
 
-    def step(self, config: ConfigLike, system_ruined: bool = False) -> dict[str, Any]:
+    def _cell_counts(self, mask: np.ndarray) -> np.ndarray:
+        cells = self._y[mask] * self.width + self._x[mask]
+        return np.bincount(cells, minlength=self.width * self.height)
+
+    # -------------------------------------------------------------------- step
+
+    def step(self, system_ruined: bool = False) -> dict[str, Any]:
+        cfg = self.config
+        proc = cfg.processes
+        field_cfg = cfg.disruption_field
+        dt = self.dt
         self.time += 1
 
-        # v0.2: prefer direct Pydantic attributes when available.
-        # Only call to_dict() in the legacy dict fallback branch (avoids conversion cost on every step).
-        if isinstance(self._raw_config, RuinConfig):
-            proc = self._raw_config.processes
-            field = self._raw_config.disruption_field
-            shock_rate = float(getattr(field, "shock_arrival_rate", 0.05))
-            shock_mean = float(getattr(field, "mean_initial_intensity", 1.0))
-            jump_rate = float(getattr(proc, "jump_intensity", 0.08))
-            jump_mean = float(getattr(proc, "jump_mean_size", 3.0))
-            travel_drift = float(getattr(proc, "travel_drift", 1.2))
-            travel_vol = float(getattr(proc, "travel_volatility", 0.4))
-            exposure_multiplier = float(getattr(field, "qdot_exposure_multiplier", 1.0))
-        else:
-            cfg = to_dict(config)
-            processes = cfg.get("processes", {})
-            field_cfg = cfg.get("disruption_field", {})
-            shock_rate = float(field_cfg.get("shock_arrival_rate", 0.05))
-            shock_mean = float(field_cfg.get("shock_mean_intensity", 1.0))
-            jump_rate = float(processes.get("jump_intensity", 0.08))
-            jump_mean = float(processes.get("jump_mean_size", 3.0))
-            travel_drift = float(processes.get("travel_drift", 1.2))
-            travel_vol = float(processes.get("travel_volatility", 0.4))
-            exposure_multiplier = float(field_cfg.get("qdot_exposure_multiplier", 1.0))
+        # 1. New uncertainty enters: demand arrivals and disruption shocks.
+        arrivals = int(self.rng.poisson(proc.demand_arrival_rate * dt))
+        self._spawn(self.rng.choice(3, size=arrivals, p=self._type_mix))
 
-        # v0.2 vectorized shock arrivals (using 1D sampler + reshape)
-        n_cells = self.width * self.height
-        shock_mask_1d = sample_shock_arrivals(
-            n_cells,
-            shock_rate,
-            dt=1.0,
-            rng=self.np_rng,
-        )
-        shock_mask = shock_mask_1d.reshape(self.height, self.width)
+        if field_cfg.enabled:
+            xs, ys, intensities = sample_shock_events(
+                field_cfg.shock_arrival_rate,
+                field_cfg.mean_initial_intensity,
+                self.width,
+                self.height,
+                dt=dt,
+                rng=self.rng,
+            )
+            self.field.inject_many(xs, ys, intensities)
 
-        for y in range(self.height):
-            for x in range(self.width):
-                if shock_mask[y, x]:
-                    intensity = float(self.np_rng.exponential(shock_mean))
-                    self.field.inject(x, y, intensity)
-
+        # 2. The field spreads and decays.
         self.field.step()
 
-        # Jump-driven shocks (also vectorized)
-        jump_mask_1d = sample_shock_arrivals(
-            n_cells,
-            jump_rate,
-            dt=1.0,
-            rng=self.np_rng,
+        # 3. Q dots move toward their destinations through the field.
+        self._exposure = (
+            self.field.exposure_at(self._x, self._y) * field_cfg.qdot_exposure_multiplier
         )
-        jump_mask = jump_mask_1d.reshape(self.height, self.width)
+        was_late = self._late.copy()
+        self._x, self._y, self._carry, moved, arrived = batch_qdot_travel_step(
+            self._x,
+            self._y,
+            self._dest_x,
+            self._dest_y,
+            self._carry,
+            self._exposure,
+            self._drift_mult[self._type],
+            self._vol_mult[self._type],
+            proc.travel_drift,
+            proc.travel_volatility,
+            proc.jump_intensity,
+            proc.jump_mean_size,
+            self.rng,
+            dt=dt,
+        )
 
-        for y in range(self.height):
-            for x in range(self.width):
-                if jump_mask[y, x]:
-                    intensity = float(self.np_rng.exponential(jump_mean))
-                    self.field.inject(x, y, intensity * 0.6)
+        # 4. Time windows run down; on-time arrivals earn, late dots cost.
+        self._slack = self._slack - dt
+        travelling = ~arrived
+        self._late = was_late | (travelling & (self._slack <= 0))
+        newly_late = self._late & ~was_late
+        failed = travelling & (self._slack <= -self._time_window[self._type])
 
-        penalty = 0.0
-        active_by_cell: dict[tuple[int, int], int] = {}
-        moving_by_cell: dict[tuple[int, int], int] = {}
-        failed_by_cell: dict[tuple[int, int], int] = {}
+        on_time = arrived & ~was_late
+        income = float(self._reward[self._type[on_time]].sum())
+        accruing = self._late & travelling
+        # A late dot costs its delay penalty each step, up to double in a fully blocked cell.
+        blocked_here = np.clip(self._exposure[accruing], 0.0, EXPOSURE_SATURATION) / EXPOSURE_SATURATION
+        penalty = float((self._delay_penalty[self._type[accruing]] * dt * (1.0 + blocked_here)).sum())
 
-        # v0.2: collect non-ruined QDots for vectorized batch step
-        active_qdots = [q for q in self.qdots if not q.is_ruined]
-        n_active = len(active_qdots)
+        # 5. Q dots reshape D: lateness and failure add local disruption.
+        feedback = newly_late | failed
+        self.field.inject_many(self._x[feedback], self._y[feedback], self.qdot_feedback_weight)
 
-        # Populate active_by_cell using pre-movement positions (restores v0.1 pressure logic)
-        for q in active_qdots:
-            pos = (q.x, q.y)
-            active_by_cell[pos] = active_by_cell.get(pos, 0) + 1
-
-        if n_active > 0:
-            xs = np.array([q.x for q in active_qdots], dtype=int)
-            ys = np.array([q.y for q in active_qdots], dtype=int)
-            tws = np.array([q.time_window for q in active_qdots], dtype=float)
-            exposures = np.array([self.field.exposure_at(q.x, q.y) for q in active_qdots], dtype=float)
-            drift_m = np.array([q.drift_multiplier for q in active_qdots], dtype=float)
-            vol_m = np.array([q.volatility_multiplier for q in active_qdots], dtype=float)
-
-            new_xs, new_ys, new_tws, raw_penalties, late_mask = batch_qdot_travel_step(
-                xs, ys, tws, exposures, drift_m, vol_m,
-                travel_drift, travel_vol, self.width, self.height, self.np_rng
-            )
-
-            # Write back + accumulate scaled penalties + track movement/ruin
-            for i, qdot in enumerate(active_qdots):
-                before = (qdot.x, qdot.y)
-                qdot.x = int(new_xs[i])
-                qdot.y = int(new_ys[i])
-                qdot.time_window = float(new_tws[i])
-                qdot.field_exposure = exposures[i] * exposure_multiplier   # restored qdot_exposure_multiplier
-
-                if (qdot.x, qdot.y) != before:
-                    moving_by_cell[(qdot.x, qdot.y)] = moving_by_cell.get((qdot.x, qdot.y), 0) + 1
-
-                if late_mask[i] and not qdot.late:
-                    qdot.late = True
-                    qdot.is_ruined = True
-                    scaled_penalty = raw_penalties[i] * qdot.delay_penalty
-                    penalty += scaled_penalty
-                    failed_by_cell[(qdot.x, qdot.y)] = failed_by_cell.get((qdot.x, qdot.y), 0) + 1
-                elif late_mask[i]:
-                    qdot.late = True
-                    qdot.is_ruined = True
-                    failed_by_cell[(qdot.x, qdot.y)] = failed_by_cell.get((qdot.x, qdot.y), 0) + 1
-
-        for (x, y), failed in failed_by_cell.items():
-            self.field.inject(x, y, failed * self.qdot_feedback_weight)
-
-        local_pressures: list[float] = []
-        for y in range(self.height):
-            for x in range(self.width):
-                active = active_by_cell.get((x, y), 0)
-                failed = failed_by_cell.get((x, y), 0)
-                failed_ratio = failed / max(active + failed, 1)
-                local_pressures.append(
-                    local_chaos_pressure(self.field.exposure_at(x, y), 0.0, failed_ratio)
-                )
-
-        late_count = sum(1 for qdot in self.qdots if qdot.late)
-        active_count = sum(1 for qdot in self.qdots if not qdot.is_ruined)
+        # 6. Pressures and D-state, over the Q dots still travelling.
+        in_flight = travelling & ~failed
+        active_count = int(in_flight.sum())
+        late_count = int((self._late & in_flight).sum())
+        moving_count = int((moved & in_flight).sum())
         late_ratio = late_count / max(active_count, 1)
 
-        self.global_chaos_pressure = global_chaos_pressure(local_pressures, late_ratio)
-        self.global_order_pressure = global_order_pressure(
-            active_count, late_count, self.max_capacity, self.initial_qdots
-        )
+        active_cells = self._cell_counts(in_flight)
+        moving_cells = self._cell_counts(moved & in_flight)
+        late_cells = self._cell_counts(self._late & in_flight)
 
-        for qdot in self.qdots:
-            active = active_by_cell.get(qdot.position, 0)
-            moving = moving_by_cell.get(qdot.position, 0)
-            failed = failed_by_cell.get(qdot.position, 0)
-            qdot.order_pressure = local_order_pressure(active, moving, failed)
+        blocked = np.clip(self.field.grid.ravel(), 0.0, EXPOSURE_SATURATION) / EXPOSURE_SATURATION
+        local_chaos = blocked + late_cells / np.maximum(active_cells, 1)
+        local_order = np.maximum(0, active_cells + moving_cells - late_cells)
+        self._order = local_order[self._y * self.width + self._x].astype(float)
 
+        self.global_chaos_pressure = global_chaos_pressure(local_chaos, late_ratio)
+        self.global_order_pressure = global_order_pressure(active_count, moving_count, late_count)
         self.d_state = choose_d_state(
             system_ruined,
             self.global_chaos_pressure,
             self.previous_chaos_pressure,
-            float(self.thresholds.get("stressed_chaos_pressure", 0.35)),
-            float(self.thresholds.get("disrupted_chaos_pressure", 0.55)),
-            float(self.thresholds.get("chaotic_chaos_pressure", 0.75)),
-            float(self.thresholds.get("recovering_decay_ratio", 0.30)),
+            self.thresholds.stressed_chaos_pressure,
+            self.thresholds.disrupted_chaos_pressure,
+            self.thresholds.chaotic_chaos_pressure,
+            self.thresholds.recovering_decay_ratio,
         )
         self.previous_chaos_pressure = self.global_chaos_pressure
 
-        snapshot = self.snapshot(penalty, late_count, active_count)
-        self.snapshots.append(snapshot)
-        return snapshot
+        # 7. Record, then let terminated Q dots leave D.
+        n_delivered = int(on_time.sum())
+        n_delivered_late = int((arrived & was_late).sum())
+        n_failed = int(failed.sum())
+        self.delivered += n_delivered
+        self.delivered_late += n_delivered_late
+        self.failed += n_failed
 
-    def snapshot(self, penalty: float, late_count: int, active_count: int) -> dict[str, Any]:
-        snap: dict[str, Any] = {
+        snapshot: dict[str, Any] = {
             "time": self.time,
             "d_state": self.d_state.value,
             "chaos_pressure": round(self.global_chaos_pressure, 6),
             "order_pressure": round(self.global_order_pressure, 6),
             "penalty": round(penalty, 6),
+            "income": round(income, 6),
             "late_count": late_count,
             "active_count": active_count,
-            "qdots": [qdot.snapshot() for qdot in self.qdots],
+            "delivered": n_delivered,
+            "delivered_late": n_delivered_late,
+            "failed": n_failed,
+            "field_mean": round(float(self.field.grid.mean()), 6),
         }
+        if self.store_qdot_snapshots:
+            snapshot["qdots"] = [q.snapshot() for q in self._records(arrived, failed)]
         if self.store_field_snapshots:
-            snap["field"] = self.field.snapshot()  # list of lists, serializable
-        return snap
+            snapshot["field"] = self.field.snapshot()
+        self.snapshots.append(snapshot)
+
+        self._keep(in_flight)
+        return snapshot

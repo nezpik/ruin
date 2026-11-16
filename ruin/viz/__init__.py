@@ -5,6 +5,6 @@ Currently provides:
 - Matplotlib GIF animation of the Probability Square + Disruption Field
 """
 
-from .square import save_text_frames, save_field_gif, animate_probability_square
+from .square import animate_probability_square, save_field_gif, save_text_frames
 
-__all__ = ["save_text_frames", "save_field_gif", "animate_probability_square"]
+__all__ = ["animate_probability_square", "save_field_gif", "save_text_frames"]

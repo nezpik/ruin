@@ -14,14 +14,11 @@ extra installed.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal, Union
+from typing import Any, Literal
 
-from ruin.config import to_dict
-from ruin.config_models import RuinConfig
-
-ConfigLike = Union[dict[str, Any], RuinConfig]
+from ruin.config import ConfigLike, as_config
 
 
 @dataclass(frozen=True)
@@ -50,8 +47,10 @@ RUIN_VOCABULARY_GLOSSARY = """\
   they can never leave D.
 - **Q dot**: a quantized delivery commitment — STANDARD (balanced),
   EXPRESS (tighter time window, higher SLA pressure), or BULKY (slower,
-  higher drag and penalty if delayed) — carrying time-window slack, penalty
-  exposure, and local disruption-field exposure.
+  higher drag and penalty if delayed) — travelling from an origin to a
+  destination inside D. Delivered inside its time window it earns surplus;
+  once late it drains surplus every step until it is delivered late or
+  abandoned (failed).
 - **Disruption Propagation Field**: spatial memory of shocks that intensifies,
   spreads to nearby cells, decays over time, and recovers.
 - **D-state**: the grid's regime — one of STABLE, STRESSED, DISRUPTED,
@@ -62,8 +61,8 @@ RUIN_VOCABULARY_GLOSSARY = """\
 - **order_pressure**: a global measure of how well active and moving Q dots
   preserve flow against failure drag.
 - **Surplus process**: `U(t) = U(0) + C(t) - L(t)`, where `U(0)` is the
-  initial operational buffer, `C(t)` is recovered/planned capacity, and
-  `L(t)` is cumulative disruption loss, delay penalty, and SLA cost.
+  initial operational buffer, `C(t)` is planned recovery plus income from
+  on-time deliveries, and `L(t)` is the cumulative delay penalty.
 - **Ruin**: the shift fails when `U(t) <= barrier` (surplus ruin) and/or
   `late_qdots / active_qdots >= sla_threshold` (SLA ruin). The configured
   `rule` (`surplus_or_sla`, `surplus`, or `sla`) decides which trigger(s)
@@ -146,32 +145,16 @@ def _summarize_d_state_transitions(d_state_path: list[str]) -> str:
 
 
 def _build_config_summary(config: ConfigLike) -> str:
-    if isinstance(config, RuinConfig):
-        sim = config.simulation
-        qdots = config.qdots
-        ruin_cfg = config.ruin
-        name, seed = sim.name, sim.seed
-        grid = f"{sim.grid_width}x{sim.grid_height}"
-        duration = sim.shift_duration
-        n_standard, n_express, n_bulky = qdots.n_standard, qdots.n_express, qdots.n_bulky
-        initial_buffer, barrier = ruin_cfg.initial_buffer, ruin_cfg.barrier
-        sla_threshold, rule = ruin_cfg.sla_threshold, ruin_cfg.rule
-    else:
-        cfg = to_dict(config)
-        sim = cfg.get("simulation", {})
-        qdots = cfg.get("qdots", {})
-        ruin_cfg = cfg.get("ruin", {})
-        name = sim.get("name", "unknown")
-        seed = sim.get("seed", 42)
-        grid = f"{sim.get('grid_width', 30)}x{sim.get('grid_height', 30)}"
-        duration = sim.get("shift_duration", 480)
-        n_standard = qdots.get("n_standard", 0)
-        n_express = qdots.get("n_express", 0)
-        n_bulky = qdots.get("n_bulky", 0)
-        initial_buffer = ruin_cfg.get("initial_buffer", 0)
-        barrier = ruin_cfg.get("barrier", 0)
-        sla_threshold = ruin_cfg.get("sla_threshold", 0.12)
-        rule = ruin_cfg.get("rule", "surplus_or_sla")
+    cfg = as_config(config)
+    sim = cfg.simulation
+    qdots = cfg.qdots
+    ruin_cfg = cfg.ruin
+    name, seed = sim.name, sim.seed
+    grid = f"{sim.grid_width}x{sim.grid_height}"
+    duration = sim.shift_duration
+    n_standard, n_express, n_bulky = qdots.n_standard, qdots.n_express, qdots.n_bulky
+    initial_buffer, barrier = ruin_cfg.initial_buffer, ruin_cfg.barrier
+    sla_threshold, rule = ruin_cfg.sla_threshold, ruin_cfg.rule
 
     return (
         f"Scenario: {name} (seed={seed})\n"
@@ -194,7 +177,11 @@ def _build_trajectory_facts(result: dict[str, Any], config: ConfigLike) -> str:
         f"ruin_reason={result.get('ruin_reason')}\n"
         f"cumulative_loss={result.get('cumulative_loss')} "
         f"final_surplus={result.get('final_surplus')} "
-        f"final_d_state={result.get('final_d_state')}"
+        f"final_d_state={result.get('final_d_state')}\n"
+        f"cumulative_income={result.get('cumulative_income')} "
+        f"qdots: spawned={result.get('spawned')} delivered_on_time={result.get('delivered')} "
+        f"delivered_late={result.get('delivered_late')} failed={result.get('failed')} "
+        f"on_time_rate={result.get('on_time_rate')}"
     )
     paths = "\n".join(
         _summarize_path(result.get(key, []), label)
@@ -244,7 +231,10 @@ def _build_risk_facts(result: dict[str, Any], config: ConfigLike) -> str:
     stats = (
         f"paths={result.get('paths')} confidence_level={result.get('confidence_level')}\n"
         f"ruin_probability={result.get('ruin_probability')} "
-        f"(bootstrap CI {result.get('ruin_probability_ci')})\n"
+        f"(bootstrap CI {result.get('ruin_probability_ci')}) "
+        f"ruin_by_surplus={result.get('ruin_by_surplus')} ruin_by_sla={result.get('ruin_by_sla')}\n"
+        f"mean_final_surplus={result.get('mean_final_surplus')} "
+        f"mean_on_time_rate={result.get('mean_on_time_rate')}\n"
         f"mean_loss={result.get('mean_loss')} loss_std={result.get('loss_std')}\n"
         f"value_at_risk={result.get('value_at_risk')} "
         f"expected_shortfall={result.get('expected_shortfall')}\n"
@@ -326,7 +316,7 @@ def _wrap_report(
     effort: str | None,
 ) -> str:
     scenario_line = _build_config_summary(config).splitlines()[0]
-    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    generated_at = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
     kind_label = "single trajectory" if kind == "trajectory" else "Monte Carlo risk analysis"
 
     duration = f"{narration.duration_ms} ms" if narration.duration_ms is not None else "n/a"

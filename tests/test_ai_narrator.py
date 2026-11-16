@@ -25,7 +25,6 @@ from ruin.config_models import RuinConfig
 from ruin.risk.ruin_probability import run_monte_carlo
 from ruin.simulation.agent_based import run_trajectory
 
-
 # ---------------------------------------------------------------------------
 # Pure-function tests — real simulation/risk results, no Codex involved.
 # ---------------------------------------------------------------------------

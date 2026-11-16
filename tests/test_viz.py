@@ -7,9 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from ruin.config import load_config
 from ruin.simulation.agent_based import run_trajectory
-from ruin.viz.square import save_text_frames, save_field_gif
+from ruin.viz.square import save_field_gif, save_text_frames
 
 
 def test_save_text_frames(small_config):

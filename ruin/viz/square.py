@@ -1,4 +1,4 @@
-"""RUIN visualization (v0.2).
+"""RUIN visualization.
 
 - Legacy text frame exporter
 - Matplotlib animation of Probability Square + Disruption Field (GIF export)
@@ -8,18 +8,17 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Union
+from typing import Any
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation, PillowWriter
 import numpy as np
+from matplotlib.animation import FuncAnimation, PillowWriter
 
-from ruin.config import to_dict
-from ruin.config_models import RuinConfig
-
-ConfigLike = Union[dict[str, Any], RuinConfig]
+from ruin.config import ConfigLike, as_config
+from ruin.core.processes import EXPOSURE_SATURATION
 
 
 def save_text_frames(result: dict[str, Any], output: str | Path, limit: int = 10) -> None:
@@ -39,20 +38,17 @@ def save_text_frames(result: dict[str, Any], output: str | Path, limit: int = 10
         lines.append(
             f"t={snapshot['time']} D={snapshot['d_state']} chaos={snapshot['chaos_pressure']} order={snapshot['order_pressure']} penalty={snapshot['penalty']}"
         )
-        ruined = [q for q in snapshot.get("qdots", []) if q.get("ruined")]
-        lines.append(f"  active={snapshot['active_count']} late={snapshot['late_count']} ruined_sample={len(ruined)}")
+        lines.append(
+            f"  active={snapshot['active_count']} late={snapshot['late_count']} "
+            f"delivered={snapshot.get('delivered', 0)} delivered_late={snapshot.get('delivered_late', 0)} "
+            f"failed={snapshot.get('failed', 0)} income={snapshot.get('income', 0.0)}"
+        )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _extract_grid_dims(config: ConfigLike) -> tuple[int, int]:
-    """v0.2 helper: get width/height from either RuinConfig or dict."""
-    if isinstance(config, RuinConfig):
-        sim = config.simulation
-        return int(sim.grid_width), int(sim.grid_height)
-    else:
-        cfg = to_dict(config)
-        sim = cfg.get("simulation", {})
-        return int(sim.get("grid_width", 30)), int(sim.get("grid_height", 30))
+    sim = as_config(config).simulation
+    return int(sim.grid_width), int(sim.grid_height)
 
 
 def animate_probability_square(
@@ -97,12 +93,12 @@ def animate_probability_square(
         cmap="inferno",
         origin="lower",
         vmin=0,
-        vmax=4.0,
+        vmax=EXPOSURE_SATURATION,
         interpolation="nearest",
     )
     plt.colorbar(field_img, ax=ax, label="Disruption Intensity", shrink=0.8)
 
-    scatter = ax.scatter([], [], c=[], s=25, cmap="cool", edgecolors="white", linewidths=0.5)
+    scatter = ax.scatter([], [], s=22, edgecolors="#222222", linewidths=0.4)
 
     time_text = ax.text(0.02, 0.98, "", transform=ax.transAxes, color="white",
                         fontsize=10, va="top", fontfamily="monospace")
@@ -113,7 +109,6 @@ def animate_probability_square(
 
     def init() -> tuple[Any, ...]:
         scatter.set_offsets(np.empty((0, 2)))
-        scatter.set_array(np.array([]))
         time_text.set_text("")
         state_text.set_text("")
         pressure_text.set_text("")
@@ -128,7 +123,7 @@ def animate_probability_square(
         order = snap.get("order_pressure", 0.0)
 
         # Use real field if stored, else synthetic
-        if "field" in snap and snap["field"]:
+        if snap.get("field"):
             field = np.array(snap["field"], dtype=float)
         else:
             mean_int = snap.get("field_intensity_mean", 0.5)
@@ -151,19 +146,23 @@ def animate_probability_square(
                     ys.append(q.get("y", 0))
             colors = []
             for q in qdots:
-                if q.get("ruined"):
+                status = q.get("status", "ACTIVE")
+                if q.get("ruined") or status == "FAILED":
                     colors.append("red")
+                elif status in ("DELIVERED", "DELIVERED_LATE"):
+                    colors.append("lime")
+                elif q.get("late"):
+                    colors.append("magenta")
                 else:
-                    qtype = q.get("type", "standard")
-                    if qtype == "express":
+                    qtype = str(q.get("type", "STANDARD")).upper()
+                    if qtype == "EXPRESS":
                         colors.append("cyan")
-                    elif qtype == "bulky":
+                    elif qtype == "BULKY":
                         colors.append("orange")
                     else:
                         colors.append("white")
             scatter.set_offsets(list(zip(xs, ys)))
-            scatter.set_array(np.array([]))
-            scatter.set_facecolor(colors)  # set_facecolors exists at runtime but not in stubs
+            scatter.set_facecolor(colors)
         else:
             scatter.set_offsets(np.empty((0, 2)))
 

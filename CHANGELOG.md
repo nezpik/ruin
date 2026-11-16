@@ -7,6 +7,112 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.0] - 2026-11
+
+**Model validity**: ruin is now a question instead of a certainty. This release
+changes the simulation model itself, so results are not comparable with 0.3.0
+and earlier, and configs need the changes listed under "Migration".
+
+Before this release every run of the reference scenario ruined between steps
+19 and 21 of 480 (ruin probability 1.0, CI [1.0, 1.0]): Q dots could never
+complete, and the disruption field amplified itself by about 14% per step.
+With the recalibrated reference scenario, 1,000 paths now give a ruin
+probability of 0.12 (95% CI 0.10 to 0.14), with ruin times spread from step 63
+to the end of the shift.
+
+### Changed
+
+- **Q dots have destinations and can succeed.** Each Q dot enters `D` at an
+  origin with a destination, travels toward it along the grid on both axes,
+  and leaves `D` only by terminating: delivered on time, delivered late, or
+  failed (abandoned after a full extra time window of lateness).
+- **Demand arrives.** `processes.demand_arrival_rate` is now used: new Q dots
+  enter each step (Poisson), with the same type mix as the initial population.
+- **Surplus can be earned.** On-time deliveries add `completion_reward` to the
+  surplus, giving the `C(t)` term of `U(t) = U(0) + C(t) - L(t)` a meaning.
+  A late Q dot drains `delay_penalty` every step it stays late (up to double
+  in a fully blocked cell) instead of paying once and stopping.
+- **Jumps act on Q dots.** `jump_intensity` / `jump_mean_size` are a per-Q-dot
+  compound Poisson setback in travel progress. They were previously a second
+  source of cell shocks and never touched Q dots.
+- **The disruption field is subcritical by construction.** Each step a cell
+  keeps `memory_weight * (1 - temporal_decay - recovery_rate)` of its
+  intensity; `propagation_share` of that moves to neighbours through a
+  normalised kernel. Total intensity can only shrink between shocks. Configs
+  whose field would never decay are rejected.
+- **Shocks are events, not noise.** `shock_arrival_rate` is now the expected
+  number of shocks per step for the whole grid (it was a per-cell probability,
+  which produced about 45 small shocks per step on the reference grid).
+- **Field drag saturates.** A cell is fully blocked at intensity 5, where
+  travel speed falls to 5% of normal.
+- **Pressures.** Chaos pressure uses the blocked fraction of each cell (0 to 1)
+  plus the late ratio. Global order pressure is the share of active Q dots
+  that moved this step minus the share that is late.
+- **D-state.** `CHAOTIC` and `DISRUPTED` now take precedence over
+  `RECOVERING`, which requires a sharp fall from an at-least-stressed level.
+  A ruined trajectory ends its `d_state_path` with `RUINED`.
+- **Late ratio** is late travelling Q dots over travelling Q dots, as defined
+  in `RUIN.md` (it was cumulative failures over the whole population).
+- **`ruin.rule` is honoured** (`surplus_or_sla`, `surplus`, `sla`).
+- **One configuration path.** YAML is read with PyYAML and always validated
+  into `RuinConfig`; plain dicts passed to the API are validated the same way.
+  The hand-written YAML parser and the separate dict code path are gone (they
+  disagreed with the typed path on the same file and seed). The CLI now exits
+  with an error on an invalid config instead of silently falling back.
+- Monte Carlo results no longer depend on worker completion order, workers
+  return only per-path summaries, and `n_jobs=1` runs in-process.
+- Q dots are stored as arrays; one 480-step path of the reference scenario
+  takes about 0.2 s.
+
+### Added
+
+- `completion_reward` per Q-dot type and `disruption_field.propagation_share`.
+- `ruin simulate --seed`.
+- Trajectory results: `cumulative_income`, `spawned`, `delivered`,
+  `delivered_late`, `failed`, `on_time_rate`. Risk results: `ruin_by_surplus`,
+  `ruin_by_sla`, `mean_final_surplus`, `mean_on_time_rate`.
+- `QDotStatus` and a `destination` / `status` on every Q-dot snapshot.
+- Behavioural tests (`tests/test_model_behaviour.py`): no disruption means no
+  ruin, the field stays bounded, more disruption means more loss, a larger
+  buffer never ruins sooner, the ruin rule is honoured, Q dots stay inside `D`
+  and move on both axes, same seed gives the same destiny.
+- Config validation: ordered D-state thresholds, non-negative rates and
+  penalties, decaying field.
+
+### Fixed
+
+- Q dots never moved on the y axis and piled up on the right wall.
+- Q-dot colours in the animation (type and status were never shown).
+
+### Removed
+
+- `QDot.step`, `to_dict`, the legacy scalar process classes
+  (`PoissonArrivalProcess`, `JumpDiffusionProcess`, `sample_travel_step`,
+  `make_py_rng`) and `sample_shock_arrivals` (replaced by `sample_shock_events`).
+
+### Migration
+
+- `ProbabilitySquare(config, seed)` takes an integer seed, and `step()` takes
+  no config argument.
+- Retune `shock_arrival_rate` (now per grid, per step), `mean_initial_intensity`
+  and time windows; add `completion_reward` if the shift should earn surplus.
+  `examples/urban_ruin_shift.yaml` is the calibrated reference.
+- `jump_size_distribution` accepts only `exponential`.
+
+### Known limits
+
+- These keys are still accepted but unused: `simulation.dt` (leave at 1),
+  `qdots.initial_distribution`, `probability_square.base_risk_intensity`,
+  `congestion_memory`, `boundary_mode`, `snapshot_interval`,
+  `order_pressure_weight`, `chaos_pressure_weight`,
+  `disruption_field.shock_types`, the `risk.report_*` flags, and
+  `visualization.*`.
+- In the reference scenario every ruin is a surplus ruin; the SLA trigger is
+  wired and tested but does not fire at the calibrated settings.
+- The model is not yet validated against closed-form ruin theory.
+
+---
+
 ## [0.3.0] - 2026-06
 
 **AI narration**: optional Codex-powered research-report generation layered on top of `simulate`/`risk` results.

@@ -5,18 +5,18 @@ from __future__ import annotations
 import pytest
 
 from ruin import cli
-from ruin.config import load_config, load_ruin_config
+from ruin.config import load_config
 from ruin.config_models import RuinConfig
-from ruin.core.qdot import QDot, QDotType
+from ruin.core.qdot import QDot, QDotStatus, QDotType
 from ruin.simulation.agent_based import run_trajectory
 
 
 def test_package_imports():
     """Core modules must be importable."""
     assert cli is not None
-    from ruin.state_space.probability_square import ProbabilitySquare  # noqa: F401
-    from ruin.risk.ruin_probability import run_monte_carlo  # noqa: F401
     from ruin.config_models import RuinConfig  # noqa: F401
+    from ruin.risk.ruin_probability import run_monte_carlo  # noqa: F401
+    from ruin.state_space.probability_square import ProbabilitySquare  # noqa: F401
 
 
 def test_load_golden_config(golden_config_path):
@@ -33,8 +33,8 @@ def test_load_golden_ruin_config(golden_ruin_config):
     assert isinstance(cfg, RuinConfig)
     assert cfg.simulation.grid_width == 30
     assert cfg.qdots.n_standard == 120
-    assert cfg.disruption_field.shock_arrival_rate == 0.05
-    assert cfg.ruin.sla_threshold == 0.12
+    assert cfg.disruption_field.shock_arrival_rate == 0.4
+    assert cfg.disruption_field.gain < 1
 
 
 def test_small_config_runs(small_config):
@@ -55,29 +55,27 @@ def test_small_ruin_config_runs(small_ruin_config):
     assert "final_d_state" in result
 
 
-def test_qdot_step_basic():
-    """QDot.step must run and correctly set ruined state when time expires."""
+def test_qdot_record_snapshot():
+    """A Q dot record reports its status, position, and destination."""
     q = QDot(
-        id=0,
-        type=QDotType.STANDARD,
-        x=3,
-        y=4,
-        time_window=5.0,
-        delay_penalty=1.0,
-        drift_multiplier=1.0,
-        volatility_multiplier=1.0,
+        id=0, type=QDotType.EXPRESS, x=3, y=4, dest_x=7, dest_y=1,
+        time_window=-2.0, delay_penalty=2.5, status=QDotStatus.LATE,
     )
-    rng = __import__("random").Random(0)
+    snap = q.snapshot()
+    assert snap["position"] == (3, 4)
+    assert snap["destination"] == (7, 1)
+    assert snap["status"] == "LATE"
+    assert snap["late"] is True
+    assert snap["ruined"] is False
 
-    # Force many steps so it goes late
-    for _ in range(20):
-        penalty = q.step(width=10, height=10, base_drift=0.8, volatility=0.2, rng=rng)
-        if q.is_ruined:
-            break
 
-    assert q.is_ruined is True
-    assert q.late is True
-    assert penalty > 0
+def test_cli_rejects_invalid_config(tmp_path, caplog):
+    """An invalid config must stop the run with a clear error, not fall back silently."""
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("simulation:\n  name: bad\n  shift_duration: 10\n", encoding="utf-8")
+    rc = cli.main(["simulate", "--config", str(bad), "--output", str(tmp_path / "f.txt")])
+    assert rc == 2
+    assert "Invalid config" in caplog.text
 
 
 def test_config_strict_validation():
