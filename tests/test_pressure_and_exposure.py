@@ -18,8 +18,13 @@ from ruin.state_space.probability_square import ProbabilitySquare
 
 def _field(**kw):
     params = dict(
-        width=21, height=21, memory_weight=0.95, propagation_radius=2,
-        propagation_decay=0.55, temporal_decay=0.03, recovery_rate=0.02,
+        width=21,
+        height=21,
+        memory_weight=0.95,
+        propagation_radius=2,
+        propagation_decay=0.55,
+        temporal_decay=0.03,
+        recovery_rate=0.02,
         propagation_share=0.4,
     )
     params.update(kw)
@@ -112,8 +117,12 @@ def test_pressure_helpers():
 
 
 def test_choose_d_state():
-    args = dict(stressed_threshold=0.3, disrupted_threshold=0.5, chaotic_threshold=0.7,
-                recovering_decay_ratio=0.2)
+    args = dict(
+        stressed_threshold=0.3,
+        disrupted_threshold=0.5,
+        chaotic_threshold=0.7,
+        recovering_decay_ratio=0.2,
+    )
     assert choose_d_state(True, 0.0, 0.0, **args) is DState.RUINED
     assert choose_d_state(False, 0.1, 0.1, **args) is DState.STABLE
     assert choose_d_state(False, 0.35, 0.34, **args) is DState.STRESSED

@@ -383,9 +383,8 @@ def generate_report(
         prompt = _build_risk_prompt(facts)
 
     narration = _call_codex(prompt, model=model, effort=effort)
-    content = (
-        _wrap_report(narration, config, kind, model=model, effort=effort)
-        + _build_appendix(facts)
+    content = _wrap_report(narration, config, kind, model=model, effort=effort) + _build_appendix(
+        facts
     )
 
     path = Path(output_path)

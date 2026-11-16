@@ -75,8 +75,7 @@ def test_more_disruption_means_more_loss(golden_ruin_config):
         cfg.ruin.rule = "surplus"
         cfg.ruin.initial_buffer = 1e9  # never ruin: compare full-horizon losses
         runs = [
-            run_trajectory(cfg, seed=s, max_steps=240, store_qdot_snapshots=False)
-            for s in range(6)
+            run_trajectory(cfg, seed=s, max_steps=240, store_qdot_snapshots=False) for s in range(6)
         ]
         return sum(r["cumulative_loss"] for r in runs) / len(runs)
 

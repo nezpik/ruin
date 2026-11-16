@@ -87,7 +87,9 @@ def test_build_config_summary_typed(small_ruin_config):
     assert "rule=surplus_or_sla" in summary
 
 
-def test_build_trajectory_prompt_uses_vocabulary_and_compresses_data(small_config, trajectory_result):
+def test_build_trajectory_prompt_uses_vocabulary_and_compresses_data(
+    small_config, trajectory_result
+):
     prompt = _build_trajectory_prompt(_build_trajectory_facts(trajectory_result, small_config))
 
     # Grounded in RUIN's vocabulary.
@@ -144,7 +146,9 @@ FAKE_NARRATION = CodexNarration(
 def fake_codex(monkeypatch):
     calls: list[dict[str, object]] = []
 
-    def fake_call_codex(prompt: str, model: str | None = None, effort: str | None = None) -> CodexNarration:
+    def fake_call_codex(
+        prompt: str, model: str | None = None, effort: str | None = None
+    ) -> CodexNarration:
         calls.append({"prompt": prompt, "model": model, "effort": effort})
         return FAKE_NARRATION
 
@@ -218,14 +222,18 @@ def test_generate_report_records_requested_model_and_effort_in_header(
 ):
     out_path = tmp_path / "report.md"
 
-    written = generate_report(trajectory_result, small_config, out_path, model="gpt-5-codex", effort="xhigh")
+    written = generate_report(
+        trajectory_result, small_config, out_path, model="gpt-5-codex", effort="xhigh"
+    )
     content = written.read_text(encoding="utf-8")
 
     assert "model=`gpt-5-codex`" in content
     assert "effort=`xhigh`" in content
 
 
-def test_generate_report_forwards_model_kwarg(tmp_path, small_config, trajectory_result, fake_codex):
+def test_generate_report_forwards_model_kwarg(
+    tmp_path, small_config, trajectory_result, fake_codex
+):
     out_path = tmp_path / "report.md"
 
     generate_report(trajectory_result, small_config, out_path, model="gpt-5-codex")
@@ -234,7 +242,9 @@ def test_generate_report_forwards_model_kwarg(tmp_path, small_config, trajectory
     assert fake_codex[0]["model"] == "gpt-5-codex"
 
 
-def test_generate_report_forwards_effort_kwarg(tmp_path, small_config, trajectory_result, fake_codex):
+def test_generate_report_forwards_effort_kwarg(
+    tmp_path, small_config, trajectory_result, fake_codex
+):
     out_path = tmp_path / "report.md"
 
     generate_report(trajectory_result, small_config, out_path, effort="low")
@@ -243,7 +253,9 @@ def test_generate_report_forwards_effort_kwarg(tmp_path, small_config, trajector
     assert fake_codex[0]["effort"] == "low"
 
 
-def test_generate_report_creates_parent_directories(tmp_path, small_config, trajectory_result, fake_codex):
+def test_generate_report_creates_parent_directories(
+    tmp_path, small_config, trajectory_result, fake_codex
+):
     out_path = tmp_path / "nested" / "dir" / "report.md"
 
     written = generate_report(trajectory_result, small_config, out_path)
@@ -298,7 +310,9 @@ def test_cli_simulate_explain_writes_report(tmp_path, golden_config_path, fake_c
     assert "AI report written to" in caplog.text
 
 
-def test_cli_simulate_explain_effort_forwards_to_codex(tmp_path, golden_config_path, fake_codex, caplog):
+def test_cli_simulate_explain_effort_forwards_to_codex(
+    tmp_path, golden_config_path, fake_codex, caplog
+):
     out_path = tmp_path / "explain.md"
     caplog.set_level("INFO", logger="ruin.cli")
 
@@ -380,11 +394,15 @@ def test_cli_simulate_without_explain_unchanged(tmp_path, golden_config_path, ca
     assert "AI report written to" not in caplog.text
 
 
-def test_cli_explain_missing_dependency_does_not_crash(tmp_path, golden_config_path, monkeypatch, caplog):
+def test_cli_explain_missing_dependency_does_not_crash(
+    tmp_path, golden_config_path, monkeypatch, caplog
+):
     """A missing 'ai' extra must not turn a successful run into a crash (see _call_codex's ImportError)."""
 
     def missing_dependency(prompt: str, model: str | None = None, effort: str | None = None) -> str:
-        raise ImportError("Codex narration requires the optional 'ai' extra: pip install 'ruin[ai]'")
+        raise ImportError(
+            "Codex narration requires the optional 'ai' extra: pip install 'ruin[ai]'"
+        )
 
     monkeypatch.setattr(narrator, "_call_codex", missing_dependency)
     caplog.set_level("INFO", logger="ruin.cli")

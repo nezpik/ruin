@@ -77,9 +77,19 @@ def _travel(n=400, exposure=0.0, seed=1, steps=1):
     arrived = np.zeros(n, dtype=bool)
     for _ in range(steps):
         x, y, carry, moved, arrived = batch_qdot_travel_step(
-            x, y, dest_x, dest_y, carry,
-            np.full(n, exposure), np.ones(n), np.ones(n),
-            1.2, 0.4, 0.05, 2.0, rng,
+            x,
+            y,
+            dest_x,
+            dest_y,
+            carry,
+            np.full(n, exposure),
+            np.ones(n),
+            np.ones(n),
+            1.2,
+            0.4,
+            0.05,
+            2.0,
+            rng,
         )
         total_moved |= moved
     return start, (x, y), (dest_x, dest_y), arrived
@@ -118,7 +128,18 @@ def test_blocked_cells_slow_travel():
 def test_travel_handles_empty_population():
     empty = np.zeros(0, dtype=int)
     out = batch_qdot_travel_step(
-        empty, empty, empty, empty, np.zeros(0), np.zeros(0), np.zeros(0), np.zeros(0),
-        1.0, 0.3, 0.05, 2.0, make_rng(0),
+        empty,
+        empty,
+        empty,
+        empty,
+        np.zeros(0),
+        np.zeros(0),
+        np.zeros(0),
+        np.zeros(0),
+        1.0,
+        0.3,
+        0.05,
+        2.0,
+        make_rng(0),
     )
     assert all(len(a) == 0 for a in out)

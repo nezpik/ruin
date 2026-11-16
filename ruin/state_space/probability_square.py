@@ -113,7 +113,9 @@ class ProbabilitySquare:
     @property
     def qdots(self) -> list[QDot]:
         """Q dots currently inside D, as records."""
-        return self._records(np.zeros(self.active_count, dtype=bool), np.zeros(self.active_count, dtype=bool))
+        return self._records(
+            np.zeros(self.active_count, dtype=bool), np.zeros(self.active_count, dtype=bool)
+        )
 
     def _spawn(self, types: np.ndarray) -> None:
         n = len(types)
@@ -143,8 +145,17 @@ class ProbabilitySquare:
 
     def _keep(self, mask: np.ndarray) -> None:
         for name in (
-            "_ids", "_type", "_x", "_y", "_dest_x", "_dest_y",
-            "_slack", "_carry", "_late", "_exposure", "_order",
+            "_ids",
+            "_type",
+            "_x",
+            "_y",
+            "_dest_x",
+            "_dest_y",
+            "_slack",
+            "_carry",
+            "_late",
+            "_exposure",
+            "_order",
         ):
             setattr(self, name, getattr(self, name)[mask])
 
@@ -241,8 +252,12 @@ class ProbabilitySquare:
         income = float(self._reward[self._type[on_time]].sum())
         accruing = self._late & travelling
         # A late dot costs its delay penalty each step, up to double in a fully blocked cell.
-        blocked_here = np.clip(self._exposure[accruing], 0.0, EXPOSURE_SATURATION) / EXPOSURE_SATURATION
-        penalty = float((self._delay_penalty[self._type[accruing]] * dt * (1.0 + blocked_here)).sum())
+        blocked_here = (
+            np.clip(self._exposure[accruing], 0.0, EXPOSURE_SATURATION) / EXPOSURE_SATURATION
+        )
+        penalty = float(
+            (self._delay_penalty[self._type[accruing]] * dt * (1.0 + blocked_here)).sum()
+        )
 
         # 5. Q dots reshape D: lateness and failure add local disruption.
         feedback = newly_late | failed

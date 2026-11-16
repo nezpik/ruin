@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # --- Leaf / sub-models -------------------------------------------------------
 
+
 class SimulationConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=False)
 
@@ -76,9 +77,7 @@ class DStateThresholds(BaseModel):
             <= self.disrupted_chaos_pressure
             <= self.chaotic_chaos_pressure
         ):
-            raise ValueError(
-                "d_state_thresholds must satisfy stressed <= disrupted <= chaotic"
-            )
+            raise ValueError("d_state_thresholds must satisfy stressed <= disrupted <= chaotic")
         return self
 
 
@@ -163,10 +162,13 @@ class VisualizationConfig(BaseModel):
     show_disruption_field: bool = True
     show_d_state: bool = True
     show_order_chaos_pressure: bool = True
-    heatmap_field: Literal["disruption_intensity", "order_pressure", "chaos_pressure"] = "disruption_intensity"
+    heatmap_field: Literal["disruption_intensity", "order_pressure", "chaos_pressure"] = (
+        "disruption_intensity"
+    )
 
 
 # --- Root model --------------------------------------------------------------
+
 
 class RuinConfig(BaseModel):
     """Complete validated RUIN configuration root."""

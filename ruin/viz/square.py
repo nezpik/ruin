@@ -100,12 +100,37 @@ def animate_probability_square(
 
     scatter = ax.scatter([], [], s=22, edgecolors="#222222", linewidths=0.4)
 
-    time_text = ax.text(0.02, 0.98, "", transform=ax.transAxes, color="white",
-                        fontsize=10, va="top", fontfamily="monospace")
-    state_text = ax.text(0.98, 0.98, "", transform=ax.transAxes, color="#ffcc00",
-                         fontsize=11, va="top", ha="right", fontweight="bold")
-    pressure_text = ax.text(0.02, 0.02, "", transform=ax.transAxes, color="#88ff88",
-                            fontsize=9, va="bottom", fontfamily="monospace")
+    time_text = ax.text(
+        0.02,
+        0.98,
+        "",
+        transform=ax.transAxes,
+        color="white",
+        fontsize=10,
+        va="top",
+        fontfamily="monospace",
+    )
+    state_text = ax.text(
+        0.98,
+        0.98,
+        "",
+        transform=ax.transAxes,
+        color="#ffcc00",
+        fontsize=11,
+        va="top",
+        ha="right",
+        fontweight="bold",
+    )
+    pressure_text = ax.text(
+        0.02,
+        0.02,
+        "",
+        transform=ax.transAxes,
+        color="#88ff88",
+        fontsize=9,
+        va="bottom",
+        fontfamily="monospace",
+    )
 
     def init() -> tuple[Any, ...]:
         scatter.set_offsets(np.empty((0, 2)))
@@ -197,4 +222,6 @@ def save_field_gif(
     max_frames: int | None = None,
 ) -> Path:
     """Convenience wrapper around animate_probability_square for real-field GIFs."""
-    return animate_probability_square(result, config, output, fps=fps, dpi=dpi, max_frames=max_frames)
+    return animate_probability_square(
+        result, config, output, fps=fps, dpi=dpi, max_frames=max_frames
+    )

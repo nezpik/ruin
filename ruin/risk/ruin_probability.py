@@ -13,7 +13,14 @@ from ruin.config import ConfigLike, as_config
 from ruin.config_models import RuinConfig
 from ruin.simulation.agent_based import run_trajectory
 
-_PATH_FIELDS = ("ruined", "ruin_time", "ruin_reason", "cumulative_loss", "final_surplus", "on_time_rate")
+_PATH_FIELDS = (
+    "ruined",
+    "ruin_time",
+    "ruin_reason",
+    "cumulative_loss",
+    "final_surplus",
+    "on_time_rate",
+)
 
 
 def _run_one_path(args: tuple[RuinConfig, int, int | None]) -> dict[str, Any]:

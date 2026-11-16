@@ -58,8 +58,15 @@ def test_small_ruin_config_runs(small_ruin_config):
 def test_qdot_record_snapshot():
     """A Q dot record reports its status, position, and destination."""
     q = QDot(
-        id=0, type=QDotType.EXPRESS, x=3, y=4, dest_x=7, dest_y=1,
-        time_window=-2.0, delay_penalty=2.5, status=QDotStatus.LATE,
+        id=0,
+        type=QDotType.EXPRESS,
+        x=3,
+        y=4,
+        dest_x=7,
+        dest_y=1,
+        time_window=-2.0,
+        delay_penalty=2.5,
+        status=QDotStatus.LATE,
     )
     snap = q.snapshot()
     assert snap["position"] == (3, 4)
@@ -81,10 +88,51 @@ def test_cli_rejects_invalid_config(tmp_path, caplog):
 def test_config_strict_validation():
     """Pydantic must reject unknown top-level keys (extra='forbid')."""
     bad_cfg = {
-        "simulation": {"name": "bad", "seed": 1, "grid_width": 5, "grid_height": 5, "shift_duration": 10},
-        "qdots": {"n_standard": 1, "n_express": 0, "n_bulky": 0, "standard": {"time_window": 10, "delay_penalty": 1, "drift_multiplier": 1, "volatility_multiplier": 1}, "express": {"time_window": 10, "delay_penalty": 1, "drift_multiplier": 1, "volatility_multiplier": 1}, "bulky": {"time_window": 10, "delay_penalty": 1, "drift_multiplier": 1, "volatility_multiplier": 1}},
-        "processes": {"demand_arrival_rate": 1, "travel_drift": 1, "travel_volatility": 0.1, "jump_intensity": 0.01, "jump_mean_size": 1},
-        "probability_square": {"d_state_thresholds": {"stressed_chaos_pressure": 0.3, "disrupted_chaos_pressure": 0.5, "chaotic_chaos_pressure": 0.7, "recovering_decay_ratio": 0.3}},
+        "simulation": {
+            "name": "bad",
+            "seed": 1,
+            "grid_width": 5,
+            "grid_height": 5,
+            "shift_duration": 10,
+        },
+        "qdots": {
+            "n_standard": 1,
+            "n_express": 0,
+            "n_bulky": 0,
+            "standard": {
+                "time_window": 10,
+                "delay_penalty": 1,
+                "drift_multiplier": 1,
+                "volatility_multiplier": 1,
+            },
+            "express": {
+                "time_window": 10,
+                "delay_penalty": 1,
+                "drift_multiplier": 1,
+                "volatility_multiplier": 1,
+            },
+            "bulky": {
+                "time_window": 10,
+                "delay_penalty": 1,
+                "drift_multiplier": 1,
+                "volatility_multiplier": 1,
+            },
+        },
+        "processes": {
+            "demand_arrival_rate": 1,
+            "travel_drift": 1,
+            "travel_volatility": 0.1,
+            "jump_intensity": 0.01,
+            "jump_mean_size": 1,
+        },
+        "probability_square": {
+            "d_state_thresholds": {
+                "stressed_chaos_pressure": 0.3,
+                "disrupted_chaos_pressure": 0.5,
+                "chaotic_chaos_pressure": 0.7,
+                "recovering_decay_ratio": 0.3,
+            }
+        },
         "disruption_field": {"shock_arrival_rate": 0.1},
         "ruin": {"initial_buffer": 10},
         "risk": {},

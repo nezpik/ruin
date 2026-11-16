@@ -21,7 +21,9 @@ def local_chaos_pressure(
     return max(0.0, disruption_intensity + congestion_memory + local_failed_qdot_ratio)
 
 
-def global_chaos_pressure(local_pressures: Sequence[float] | np.ndarray, late_ratio: float) -> float:
+def global_chaos_pressure(
+    local_pressures: Sequence[float] | np.ndarray, late_ratio: float
+) -> float:
     if len(local_pressures) == 0:
         return late_ratio
     return float(np.mean(local_pressures)) + late_ratio
@@ -59,9 +61,8 @@ def choose_d_state(
         return DState.CHAOTIC
     if current_chaos >= disrupted_threshold:
         return DState.DISRUPTED
-    if (
-        previous_chaos >= stressed_threshold
-        and current_chaos < previous_chaos * (1.0 - recovering_decay_ratio)
+    if previous_chaos >= stressed_threshold and current_chaos < previous_chaos * (
+        1.0 - recovering_decay_ratio
     ):
         return DState.RECOVERING
     if current_chaos >= stressed_threshold:

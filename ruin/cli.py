@@ -23,7 +23,9 @@ EXPLAIN_EFFORT_CHOICES = ["none", "minimal", "low", "medium", "high", "xhigh"]
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="ruin", description="RUIN: destiny-framed ruin risk for logistics flow")
+    parser = argparse.ArgumentParser(
+        prog="ruin", description="RUIN: destiny-framed ruin risk for logistics flow"
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     simulate = subparsers.add_parser("simulate", help="Run one visible Urban Ruin Shift trajectory")
@@ -33,7 +35,11 @@ def build_parser() -> argparse.ArgumentParser:
     simulate.add_argument("--seed", type=int, default=None, help="Override the config's seed")
     simulate.add_argument("--output", default="ruin_frames.txt")
     simulate.add_argument("--json", action="store_true")
-    simulate.add_argument("--visualize", action="store_true", help="Generate animated GIF of the real disruption field + Q-dots")
+    simulate.add_argument(
+        "--visualize",
+        action="store_true",
+        help="Generate animated GIF of the real disruption field + Q-dots",
+    )
     simulate.add_argument(
         "--explain",
         metavar="PATH",
@@ -52,7 +58,9 @@ def build_parser() -> argparse.ArgumentParser:
     risk.add_argument("--paths", type=int, default=None)
     risk.add_argument("--confidence", type=float, default=None)
     risk.add_argument("--max-steps", type=int, default=None)
-    risk.add_argument("--jobs", type=int, default=None, help="Number of parallel workers (default: auto)")
+    risk.add_argument(
+        "--jobs", type=int, default=None, help="Number of parallel workers (default: auto)"
+    )
     risk.add_argument(
         "--explain",
         metavar="PATH",
@@ -85,7 +93,9 @@ def _maybe_explain(
         logger.error("Skipping --explain: %s", exc)
         return
     except Exception as exc:
-        logger.warning("--explain failed and will be skipped (simulation output is unaffected): %s", exc)
+        logger.warning(
+            "--explain failed and will be skipped (simulation output is unaffected): %s", exc
+        )
         return
     logger.info("AI report written to %s", out)
 
