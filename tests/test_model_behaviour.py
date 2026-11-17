@@ -112,15 +112,54 @@ def test_larger_buffer_never_ruins_sooner(golden_ruin_config):
     ],
 )
 def test_ruin_rule_is_honoured(rule, surplus_breach, sla_breach, expected):
-    network = NetworkSurplus(initial_buffer=10.0, barrier=0.0, sla_threshold=0.5, rule=rule)
+    network = NetworkSurplus(
+        initial_buffer=10.0, barrier=0.0, sla_threshold=0.5, rule=rule, sla_window=1
+    )
     network.update(
         time=1,
         penalty=20.0 if surplus_breach else 1.0,
-        late_count=9 if sla_breach else 0,
+        late_count=0,
         active_count=10,
+        missed=9 if sla_breach else 0,
+        on_time=1 if sla_breach else 10,
     )
     assert network.ruin_reason == expected
     assert network.ruined is (expected is not None)
+
+
+def test_sla_is_a_rolling_deadline_miss_rate():
+    network = NetworkSurplus(
+        initial_buffer=1e9, barrier=0.0, sla_threshold=0.2, rule="sla", sla_window=3
+    )
+
+    def step(t, missed, on_time):
+        network.update(t, 0.0, late_count=0, active_count=10, missed=missed, on_time=on_time)
+
+    # A terrible first step is not judged: a full window has not been seen yet.
+    step(1, 5, 5)
+    step(2, 0, 20)
+    assert network.sla_miss_rate_path == pytest.approx([0.5, 5 / 30])
+    assert not network.ruined
+    # Window is now full: 5 missed of 50 judged = 10%, under the 20% threshold.
+    step(3, 0, 20)
+    assert network.sla_miss_rate_path[-1] == pytest.approx(0.1)
+    assert not network.ruined
+    # The bad first step rolls out of the window.
+    step(4, 0, 20)
+    assert network.sla_miss_rate_path[-1] == 0.0
+    # 12 missed against 48 on time over the last three steps = 20%: breach.
+    step(5, 12, 8)
+    assert network.sla_miss_rate_path[-1] == pytest.approx(12 / 60)
+    assert network.ruined and network.ruin_reason == "sla" and network.ruin_time == 5
+
+
+def test_in_flight_lateness_alone_does_not_breach_the_sla():
+    network = NetworkSurplus(
+        initial_buffer=1e9, barrier=0.0, sla_threshold=0.05, rule="sla", sla_window=1
+    )
+    network.update(1, 0.0, late_count=9, active_count=10, missed=0, on_time=10)
+    assert network.late_ratio_path == [0.9]
+    assert not network.ruined
 
 
 def test_surplus_accounts_for_income_and_recovery():
@@ -168,3 +207,63 @@ def test_loss_by_type_adds_up(golden_ruin_config):
     assert sum(result["loss_by_type"].values()) == pytest.approx(
         result["cumulative_loss"], abs=1e-3
     )
+
+
+def test_missed_deadlines_are_counted_once(golden_ruin_config):
+    cfg = golden_ruin_config.model_copy(deep=True)
+    cfg.disruption_field.shock_arrival_rate *= 2
+    square = ProbabilitySquare(cfg, seed=6, store_qdot_snapshots=False)
+    missed = sum(square.step()["missed"] for _ in range(300))
+    assert missed > 0
+    in_flight_late = sum(1 for q in square.qdots if q.late)
+    assert missed == square.delivered_late + square.failed + in_flight_late
+
+
+def test_loss_ledger_accounts_for_every_qdot_and_all_loss(golden_ruin_config):
+    cfg = golden_ruin_config.model_copy(deep=True)
+    cfg.disruption_field.shock_arrival_rate *= 2
+    result = run_trajectory(cfg, seed=4, max_steps=250, store_qdot_snapshots=False)
+    square = ProbabilitySquare(cfg, seed=4, store_qdot_snapshots=False)
+    penalties = sum(square.step()["penalty"] for _ in range(len(result["surplus_path"])))
+    ledger = square.ledger()
+
+    assert len(ledger) == square.spawned == len({row["id"] for row in ledger})
+    assert sum(row["loss"] for row in ledger) == pytest.approx(penalties, rel=1e-6)
+    assert square.loss_field.sum() == pytest.approx(penalties, rel=1e-6)
+    # Only Q dots that missed their deadline carry loss.
+    assert all(row["loss"] == 0 for row in ledger if row["status"] in ("ACTIVE", "DELIVERED"))
+    assert all(row["end_time"] is None for row in ledger if row["status"] in ("ACTIVE", "LATE"))
+
+    top = result["top_contributors"]
+    assert top and top[0]["loss"] == max(row["loss"] for row in ledger)
+    assert [r["loss"] for r in top] == sorted((r["loss"] for r in top), reverse=True)
+    assert 0 < sum(r["share_of_loss"] for r in top) <= 1.0 + 1e-6
+    concentration = result["loss_concentration"]
+    assert concentration["qdots"] == square.spawned
+    assert 0 < concentration["qdots_with_loss"] < concentration["qdots"]
+    assert 0 < concentration["top_1pct_share"] <= 1
+
+
+def test_fork_shares_the_past_and_not_the_future(golden_ruin_config):
+    square = ProbabilitySquare(golden_ruin_config, seed=3, store_qdot_snapshots=False)
+    for _ in range(40):
+        square.step()
+    field_before = square.field.grid.copy()
+    positions_before = [q.position for q in square.qdots]
+
+    twin_a, twin_b, other = square.fork(7), square.fork(7), square.fork(8)
+    assert twin_a.time == square.time and twin_a.spawned == square.spawned
+    for _ in range(30):
+        twin_a.step()
+        twin_b.step()
+        other.step()
+
+    # Stepping the forks left the original untouched.
+    assert square.time == 40
+    assert (square.field.grid == field_before).all()
+    assert [q.position for q in square.qdots] == positions_before
+    # Same seed, same future; different seed, different future.
+    assert twin_a.snapshots == twin_b.snapshots
+    assert [s["chaos_pressure"] for s in twin_a.snapshots] != [
+        s["chaos_pressure"] for s in other.snapshots
+    ]

@@ -23,6 +23,7 @@ _PATH_FIELDS = (
     "min_surplus",
     "on_time_rate",
     "loss_by_type",
+    "loss_concentration",
 )
 
 
@@ -177,6 +178,24 @@ def run_monte_carlo(
         for name in results[0]["loss_by_type"]
     }
 
+    # Euler allocation of Expected Shortfall: each type's mean loss over the
+    # tail paths. The parts add up to the Expected Shortfall itself.
+    var = value_at_risk(losses, level)
+    tail = [r for r in results if float(r["cumulative_loss"]) >= var]
+    es_by_type = {
+        name: round(mean(float(r["loss_by_type"][name]) for r in tail), 4) if tail else 0.0
+        for name in results[0]["loss_by_type"]
+    }
+    top_shares = [
+        float(r["loss_concentration"]["top_1pct_share"])
+        for r in results
+        if float(r["cumulative_loss"]) > 0
+    ]
+    with_loss = [
+        r["loss_concentration"]["qdots_with_loss"] / max(r["loss_concentration"]["qdots"], 1)
+        for r in results
+    ]
+
     rng = np.random.default_rng(base_seed)
     var_ci, es_ci = bootstrap_tail_ci(losses, level, level, ci_boot, rng)
     loss_std = stdev(losses) if len(losses) > 1 else 0.0
@@ -196,6 +215,9 @@ def run_monte_carlo(
         "expected_shortfall": round(expected_shortfall(losses, level), 4),
         "expected_shortfall_ci": _rounded(es_ci),
         "loss_share_by_type": loss_share_by_type,
+        "expected_shortfall_by_type": es_by_type,
+        "share_of_qdots_with_loss": round(mean(with_loss), 6) if with_loss else 0.0,
+        "loss_share_of_top_1pct_qdots": round(mean(top_shares), 4) if top_shares else None,
         "mean_final_surplus": round(mean(final_surpluses), 4) if final_surpluses else 0.0,
         "mean_min_surplus": round(mean(min_surpluses), 4) if min_surpluses else None,
         "mean_on_time_rate": round(mean(on_time), 4) if on_time else None,

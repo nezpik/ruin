@@ -7,6 +7,105 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.0] - 2026-11
+
+**Making destiny measurable**: the remaining destiny of a shift as a curve, a
+ledger of which Q dots carried the loss, and an honest account of how much
+the answer depends on the parameters. The SLA is redefined and the reference
+scenario rebalanced, so results are not comparable with 0.5.0.
+
+### Added
+
+- **Remaining destiny** (`ruin/risk/destiny.py`, `ruin destiny`). Follows one
+  shift and, at regular checkpoints, branches independent futures from the
+  exact present state. `destiny(t)` is the share that reach the horizon
+  without ruin, with a Wilson interval. Each checkpoint also reports the
+  buffer the shift would need for a chosen chance of no surplus ruin, the
+  expected loss still to come, and how ruined futures split between surplus
+  and SLA. `--plot` writes the curve as a PNG. At `t = 0` it agrees with
+  `1 - ruin probability` (tested).
+- `ProbabilitySquare.fork(seed)` and `NetworkSurplus.fork()`: an independent
+  copy of the present with a fresh random stream.
+- **Loss ledger.** Every Q dot's origin, destination, spawn and end time,
+  final status, and the loss it carried (`ProbabilitySquare.ledger()`).
+  Trajectory results gain `top_contributors`, `loss_concentration`, and
+  `loss_field` (loss accrued per cell). Risk results gain
+  `expected_shortfall_by_type` (an Euler allocation: the parts add up to the
+  Expected Shortfall), `share_of_qdots_with_loss`, and
+  `loss_share_of_top_1pct_qdots`. New heatmap option
+  `visualization.heatmap_field: accumulated_loss`.
+- **Parameter sensitivity** (`ruin sensitivity`): ruin probability with each
+  parameter moved down and up by a relative step, ranked by elasticity of the
+  odds of ruin, with effects inside Monte Carlo noise flagged.
+- **Parameter uncertainty** (`ruin uncertainty`, config key
+  `risk.parameter_uncertainty`): give each uncertain parameter a relative
+  spread, draw plausible parameter sets, and report the distribution of ruin
+  probability and its average (the predictive ruin probability).
+- `ruin.sla_window`, `sla_miss_rate_path`, and a `missed` count per step.
+
+### Changed
+
+- **The SLA is a rolling deadline-miss rate.** It is breached when deadlines
+  missed / (deadlines missed + on-time deliveries) over the last `sla_window`
+  steps reaches `sla_threshold`, and is judged only once a full window has
+  been observed. A deadline counts as missed the moment a time window runs
+  out. The previous measure, the share of in-flight Q dots that are late,
+  never exceeded about 1% and could not fire at any realistic threshold; it
+  is still reported as `late_ratio_path` and still feeds chaos pressure.
+- **Reference scenario rebalanced** so that both barriers are live and the
+  SLA means something: shock rate 0.72 (was 0.4), delay penalties a fifth of
+  their old values (0.2 / 0.5 / 0.4), SLA "at most 5% of deadlines missed
+  over 60 steps", D-state thresholds 0.37 / 0.44 / 0.52. Over 1,000 paths:
+  ruin probability 0.125 (95% interval 0.106 to 0.147), 73 by surplus and 52
+  by SLA, on-time delivery 98.8%.
+- `advance_shift` and `make_network` are shared by `run_trajectory` and the
+  destiny branches, so a branch is the same code as a shift.
+
+### What the analysis showed
+
+Before the rebalance (0.5.0 reference scenario, 300 shifts):
+
+- **Ruin came from a handful of stragglers.** Only 0.25% of Q dots incurred
+  any loss, and the top 0.1% carried 75% of it. One express dot stuck for a
+  full extra window could cost more than the whole buffer.
+- **So service level and ruin were unrelated.** On-time delivery stayed above
+  99.7% even in ruined shifts. A deadline-miss SLA would have needed a
+  threshold near 2% to fire at all.
+- **Trip length is the risk.** Trips over 40 cells were 4% of Q dots and 60%
+  of the loss; trips under 20 cells were half the Q dots and none of it. A
+  fixed promise over uniform distances puts all the risk on the longest trips.
+- **The present predicts about 60 steps ahead.** Field intensity now
+  correlates 0.25 with loss over the next 60 steps and not at all beyond.
+
+After the rebalance:
+
+- About 1.2% of Q dots carry loss and the largest single contribution in a
+  shift is typically 20 to 30 (a single dot could cost up to 230 before),
+  but the top 1% still carry 97%. Loss remains
+  concentrated by construction until deadlines depend on trip length.
+- **Sensitivity ranking** (10% moves, 200 paths): time windows (elasticity
+  -32), travel speed (-18), shock size (+15), shock rate (+13), then delay
+  penalty (+4) and completion reward (-3). Buffer size (-1), demand, and jump
+  rate are inside the noise. With half the ruins now coming from the SLA, a
+  bigger buffer buys little.
+- **Parameter uncertainty dominates.** With shock rate, shock size, and demand
+  known to 10%, travel speed to 5%, and jump rate to 20%, the ruin
+  probability across 40 parameter draws has a median of 16% and a 5% to 95%
+  range of 0% to 75%. Its average, the predictive ruin probability, is 28%
+  against about 12% with the parameters taken as exact.
+- **Destiny curves are informative.** An SLA ruin can be visible 20 steps
+  ahead (every one of 64 futures ruins); a surplus ruin can be preceded by a
+  fall to 31%, a recovery to 84%, and a final collapse.
+
+### Known limits
+
+- Loss is still concentrated in long trips (see above).
+- Q-to-D feedback is still weak; congestion affects chaos pressure only.
+- `ruin sensitivity` and `ruin uncertainty` take a few minutes at their
+  defaults (about 4,000 shifts each).
+
+---
+
 ## [0.5.0] - 2026-11
 
 **Validation**: the risk layer now agrees with classical ruin theory, every

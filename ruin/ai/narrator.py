@@ -64,7 +64,8 @@ RUIN_VOCABULARY_GLOSSARY = """\
   initial operational buffer, `C(t)` is planned recovery plus income from
   on-time deliveries, and `L(t)` is the cumulative delay penalty.
 - **Ruin**: the shift fails when `U(t) <= barrier` (surplus ruin) and/or
-  `late_qdots / active_qdots >= sla_threshold` (SLA ruin). The configured
+  the share of deadlines missed over the last `sla_window` steps reaches
+  `sla_threshold` (SLA ruin; `sla_miss_rate` is that share). The configured
   `rule` (`surplus_or_sla`, `surplus`, or `sla`) decides which trigger(s)
   actually apply for this scenario.
 """
@@ -161,7 +162,7 @@ def _build_config_summary(config: ConfigLike) -> str:
         f"Grid D: {grid}, shift_duration={duration} steps\n"
         f"Q dots: {n_standard} standard, {n_express} express, {n_bulky} bulky\n"
         f"Ruin setup: initial_buffer={initial_buffer}, barrier={barrier}, "
-        f"sla_threshold={sla_threshold}, rule={rule}"
+        f"sla_threshold={sla_threshold} over sla_window={ruin_cfg.sla_window} steps, rule={rule}"
     )
 
 
@@ -182,13 +183,15 @@ def _build_trajectory_facts(result: dict[str, Any], config: ConfigLike) -> str:
         f"qdots: spawned={result.get('spawned')} delivered_on_time={result.get('delivered')} "
         f"delivered_late={result.get('delivered_late')} failed={result.get('failed')} "
         f"on_time_rate={result.get('on_time_rate')}\n"
-        f"min_surplus={result.get('min_surplus')} loss_by_type={result.get('loss_by_type')}"
+        f"min_surplus={result.get('min_surplus')} loss_by_type={result.get('loss_by_type')}\n"
+        f"loss_concentration={result.get('loss_concentration')}"
     )
     paths = "\n".join(
         _summarize_path(result.get(key, []), label)
         for key, label in (
             ("surplus_path", "surplus"),
             ("late_ratio_path", "late_ratio"),
+            ("sla_miss_rate_path", "sla_miss_rate"),
             ("chaos_pressure_path", "chaos_pressure"),
             ("order_pressure_path", "order_pressure"),
         )
@@ -244,6 +247,9 @@ def _build_risk_facts(result: dict[str, Any], config: ConfigLike) -> str:
         f"losses cover the whole shift (paths run on after ruin); "
         f"loss_share_by_type={result.get('loss_share_by_type')} "
         f"mean_min_surplus={result.get('mean_min_surplus')}\n"
+        f"expected_shortfall_by_type={result.get('expected_shortfall_by_type')} "
+        f"share_of_qdots_with_loss={result.get('share_of_qdots_with_loss')} "
+        f"loss_share_of_top_1pct_qdots={result.get('loss_share_of_top_1pct_qdots')}\n"
         f"time_to_ruin: {ttr_summary}"
     )
 

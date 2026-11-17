@@ -4,7 +4,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.11--3.14-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![v0.5.0](https://img.shields.io/badge/Version-v0.5.0-green.svg)](https://github.com/nezpik/ruin)
+[![v0.6.0](https://img.shields.io/badge/Version-v0.6.0-green.svg)](https://github.com/nezpik/ruin)
 
 RUIN is a research-grade framework for measuring when physical logistics systems run out of destiny. It translates quantitative finance concepts (ruin theory, jump-diffusion, Monte Carlo paths, VaR, Expected Shortfall, bootstrap confidence intervals) into a logistics language built around **physical uncertainty**, **service failure**, and **systemic collapse**.
 
@@ -34,7 +34,7 @@ In RUIN:
 - **Travel is a jump-diffusion.** Progress per step is drift slowed by local field drag, plus Gaussian noise, minus occasional compound Poisson setbacks.
 - **Disruption is a field of events.** Shocks land on the grid, spread to neighbouring cells, and fade. The field is subcritical by construction: a shock can never amplify itself. By default it reflects at the edges: disruption, like Q dots, cannot leave `D`.
 - **Q and D co-evolve.** The field slows Q dots; late and failed Q dots add disruption where they stand.
-- **Ruin is uncertain.** With no disruption the reference shift never ruins. With the calibrated disruption level about one shift in seven does, at very different times.
+- **Ruin is uncertain.** With no disruption the reference shift never ruins. With the calibrated disruption level about one shift in eight does, at very different times, some by exhausting the surplus and some by breaching the SLA.
 
 Everything is seeded and reproducible, Monte Carlo runs in parallel, and a 480-step path takes about 0.2 s.
 
@@ -73,34 +73,33 @@ This produces:
 ### Run Monte Carlo Risk Analysis (Parallel)
 
 ```bash
-uv run ruin risk --config examples/urban_ruin_shift.yaml --paths 200 --jobs 4
+uv run ruin risk --config examples/urban_ruin_shift.yaml --jobs 4
 ```
 
-Example output (`time_to_ruin` list omitted):
+Example output for the 1,000 paths the config asks for (`time_to_ruin` list omitted):
 
 ```json
 {
-  "paths": 200,
-  "ruin_probability": 0.115,
-  "ruin_probability_ci": [0.0779, 0.1666],
-  "ruin_by_surplus": 23,
-  "ruin_by_sla": 0,
-  "mean_loss": 195.1919,
-  "mean_loss_ci": [178.3592, 212.7041],
-  "loss_std": 124.3531,
-  "value_at_risk": 412.3422,
-  "value_at_risk_ci": [357.2197, 553.1144],
-  "expected_shortfall": 540.6438,
-  "expected_shortfall_ci": [450.5523, 611.1435],
-  "loss_share_by_type": {
-    "STANDARD": 0.0948,
-    "EXPRESS": 0.9028,
-    "BULKY": 0.0024
-  },
-  "mean_final_surplus": 194.8714,
-  "mean_min_surplus": 78.0061,
-  "mean_on_time_rate": 0.9975,
-  "mean_time_to_ruin": 244.39,
+  "paths": 1000,
+  "ruin_probability": 0.125,
+  "ruin_probability_ci": [0.1059, 0.1469],
+  "ruin_by_surplus": 73,
+  "ruin_by_sla": 52,
+  "mean_loss": 239.2149,
+  "mean_loss_ci": [233.6229, 244.9512],
+  "loss_std": 93.4473,
+  "value_at_risk": 409.6681,
+  "value_at_risk_ci": [393.0313, 432.9468],
+  "expected_shortfall": 486.4877,
+  "expected_shortfall_ci": [460.7321, 511.6302],
+  "loss_share_by_type": {"STANDARD": 0.1736, "EXPRESS": 0.8009, "BULKY": 0.0255},
+  "expected_shortfall_by_type": {"STANDARD": 90.864, "EXPRESS": 376.2256, "BULKY": 19.3981},
+  "share_of_qdots_with_loss": 0.011846,
+  "loss_share_of_top_1pct_qdots": 0.9676,
+  "mean_final_surplus": 144.6213,
+  "mean_min_surplus": 81.543,
+  "mean_on_time_rate": 0.9877,
+  "mean_time_to_ruin": 284.51,
   "confidence_level": 0.95,
   "n_jobs": 4
 }
@@ -110,9 +109,77 @@ How to read it:
 
 - Every `*_ci` is a confidence interval at `confidence_level`. The ruin probability uses a Wilson interval, which stays informative even when no path ruins. The loss figures use a bootstrap.
 - Each path runs to the end of the shift even after it ruins, so the loss figures describe whole shifts and are not cut off at the moment of ruin.
-- With 1,000 paths the same scenario gives a ruin probability of 0.14 (95% interval 0.12 to 0.16).
+- `ruin_by_surplus` / `ruin_by_sla` say which barrier was hit first. The SLA is breached when the share of deadlines missed over the last `sla_window` steps reaches `sla_threshold`.
+- `expected_shortfall_by_type` splits the Expected Shortfall among Q-dot types; the parts add up to the total.
+- `share_of_qdots_with_loss` and `loss_share_of_top_1pct_qdots` say how concentrated the loss is. Here about 1% of Q dots carry essentially all of it.
 
 The `--jobs` flag controls parallelism (defaults to available cores).
+
+---
+
+## Remaining Destiny
+
+`ruin risk` answers "how often does a shift like this ruin?". `ruin destiny` answers the question the project is named for: *how much destiny does this shift have left, right now?*
+
+```bash
+uv run ruin destiny --config examples/urban_ruin_shift.yaml --seed 56 --plot destiny.png
+```
+
+It follows one shift. Every 24 steps it freezes the exact present (every Q dot, every cell of the disruption field, the surplus, the SLA window) and plays 64 independent futures forward from it. The share that reach the end of the shift without ruin is the shift's **remaining destiny** at that moment:
+
+```text
+destiny(t) = P(no ruin before the horizon | everything known at t)
+```
+
+![Remaining destiny of one shift](docs/destiny_seed56.png)
+
+This shift started with an 83% chance, fell to 31% as its surplus drained, recovered to 84%, then lost its destiny for good and ruined at step 352. The lower panel shows why: surplus against the buffer the shift would need, at each moment, for a 95% chance of never touching the surplus barrier. Each checkpoint also reports the expected loss still to come and how the ruined futures split between surplus and SLA.
+
+At `t = 0` the remaining destiny is one minus the ruin probability, so the two commands cross-check each other.
+
+---
+
+## Who Carried the Loss
+
+Every Q dot has a ledger entry: where it entered, where it was going, how it ended, and how much loss it carried. `ruin simulate` reports the largest contributors and how concentrated the loss was:
+
+```bash
+uv run ruin simulate --config examples/urban_ruin_shift.yaml --seed 56
+```
+
+The full ledger is `ProbabilitySquare.ledger()`; a trajectory result carries `top_contributors`, `loss_concentration`, and `loss_field` (loss accrued per cell). Set `visualization.heatmap_field: accumulated_loss` to watch the loss map build up in the GIF.
+
+---
+
+## Parameter Sensitivity and Uncertainty
+
+A confidence interval says how well the simulation has converged for one exact set of parameters. It says nothing about whether those parameters are right.
+
+```bash
+uv run ruin sensitivity --config examples/urban_ruin_shift.yaml
+```
+
+moves each parameter down and up by 10% and ranks them by effect on the odds of ruin (200 paths each):
+
+| Parameter (moved ±10%) | Ruin at −10% | Ruin at +10% | Elasticity |
+| --- | --- | --- | --- |
+| `qdots.*.time_window` | 74.0% | 0.5% | -31.6 |
+| `processes.travel_drift` | 53.5% | 3.0% | -18.0 |
+| `disruption_field.mean_initial_intensity` | 4.0% | 47.5% | +15.3 |
+| `disruption_field.shock_arrival_rate` | 4.5% | 39.0% | +13.0 |
+| `qdots.*.delay_penalty` | 8.0% | 16.5% | +4.1 |
+| `qdots.*.completion_reward` | 14.0% | 8.5% | -2.8 |
+| `processes.demand_arrival_rate` | 16.5% | 13.0% | -1.4 |
+| `ruin.initial_buffer` | 11.5% | 9.5% | -1.1 |
+| `processes.jump_intensity` | 13.5% | 13.0% | -0.2 |
+
+An elasticity of 15 means a 1% increase multiplies the odds of ruin by about 1.16. The top four are differences far beyond Monte Carlo noise; the output flags the ones that are not (`within_noise`).
+
+```bash
+uv run ruin uncertainty --config examples/urban_ruin_shift.yaml
+```
+
+goes one step further. The config lists how well each parameter is known (`risk.parameter_uncertainty`: here shock rate, shock size, and demand to 10%, travel speed to 5%, jump rate to 20%). The command draws 40 plausible parameter sets and estimates the ruin probability for each. For the reference scenario the ruin probability across draws has a median of 16%, a 5% to 95% range of 0% to 75%, and averages 28%, against about 12% when the parameters are taken as exact. **For this model, not knowing the parameters matters far more than Monte Carlo error**, and admitting it roughly doubles the chance of ruin.
 
 ---
 
@@ -208,7 +275,7 @@ Full definitions and deeper philosophy are in `RUIN.md`.
 
 ---
 
-## Current Architecture (v0.5.0)
+## Current Architecture (v0.6.0)
 
 ```
 ruin/
@@ -223,7 +290,9 @@ ruin/
 │   └── agent_based.py
 ├── risk/
 │   ├── ruin_probability.py     # Parallel MC, Wilson and bootstrap intervals, VaR/ES
-│   └── classical.py            # Cramér-Lundberg closed form and validation
+│   ├── classical.py            # Cramér-Lundberg closed form and validation
+│   ├── destiny.py              # Remaining destiny: branching futures from the present
+│   └── uncertainty.py          # Parameter sensitivity and uncertainty
 ├── viz/
 │   └── square.py               # Matplotlib FuncAnimation + real-field GIFs
 ├── ai/
@@ -263,12 +332,13 @@ These are explicitly deferred until the abstract mechanics are solid and reprodu
 
 **Done in v0.5 (validation):** agreement with the closed-form Cramér-Lundberg ruin probability; Wilson interval for ruin probability and bootstrap intervals for mean loss, VaR, and Expected Shortfall; losses measured over whole shifts; continuous integration; boundary modes, background risk, congestion memory, snapshot interval, and the visualization options wired to the config.
 
-**Then (making destiny measurable):**
-- Remaining destiny: the conditional survival probability from the current state, as a curve over the shift
-- Per-Q-dot contribution to ruin
-- Parameter uncertainty: ruin probability is far more sensitive to shock rate and time windows than to Monte Carlo noise
+**Done in v0.6 (making destiny measurable):** remaining destiny as a curve over the shift; a per-Q-dot loss ledger, loss map, and Expected Shortfall split by type; parameter sensitivity and parameter uncertainty; an SLA defined on missed deadlines; a rebalanced reference scenario where both ruin barriers are live.
+
+**Next (chaotic organization and hedging):**
 - Detection of clusters, corridors, and ruin zones; shock attribution by `shock_types`
 - Stronger Q-to-D feedback (congestion that slows travel), which today is weak
+- Deadlines that depend on trip length: today a fixed promise makes long trips carry almost all the risk
+- A policy layer: buffers, backup capacity, and rerouting compared by ruin probability reduced per unit cost
 
 **Later (when the abstract core is trusted):**
 - Real road graphs and spatial topologies
@@ -298,7 +368,7 @@ If you use RUIN, its concepts, terminology, code, or experimental outputs in aca
 
 Suggested citation:
 
-> Zouiti, Naji. RUIN: Ruin-probability Unified In Networks. v0.5.0, 2026.  
+> Zouiti, Naji. RUIN: Ruin-probability Unified In Networks. v0.6.0, 2026.  
 > GitHub: https://github.com/nezpik/ruin
 
 BibTeX:
@@ -308,7 +378,7 @@ BibTeX:
   author = {Zouiti, Naji},
   title = {RUIN: Ruin-probability Unified In Networks},
   year = {2026},
-  version = {0.5.0},
+  version = {0.6.0},
   url = {https://github.com/nezpik/ruin}
 }
 ```

@@ -7,8 +7,9 @@ reproduced here.
 ```yaml
 # Urban Ruin Shift: the reference RUIN scenario.
 #
-# Calibrated so that ruin is a real question: about one shift in seven ruins
-# over the 480-step horizon (see `ruin risk`). All quantities are per step.
+# Calibrated so that ruin is a real question: about one shift in eight ruins
+# over the 480-step horizon (see `ruin risk`), some by exhausting the surplus
+# and some by breaching the SLA. All quantities are per step.
 
 simulation:
   name: urban_ruin_shift
@@ -26,19 +27,19 @@ qdots:
   initial_distribution: uniform
   standard:
     time_window: 70          # steps allowed to reach the destination
-    delay_penalty: 1.0       # loss per step while late
+    delay_penalty: 0.2       # loss per step while late
     drift_multiplier: 1.0
     volatility_multiplier: 1.0
     completion_reward: 0.05  # surplus earned by an on-time delivery
   express:
     time_window: 46
-    delay_penalty: 2.5
+    delay_penalty: 0.5
     drift_multiplier: 1.25
     volatility_multiplier: 1.2
     completion_reward: 0.12
   bulky:
     time_window: 104
-    delay_penalty: 2.0
+    delay_penalty: 0.4
     drift_multiplier: 0.7
     volatility_multiplier: 0.9
     completion_reward: 0.08
@@ -58,9 +59,9 @@ probability_square:
   snapshot_interval: 1
   initial_d_state: stable
   d_state_thresholds:
-    stressed_chaos_pressure: 0.20
-    disrupted_chaos_pressure: 0.27
-    chaotic_chaos_pressure: 0.34
+    stressed_chaos_pressure: 0.37
+    disrupted_chaos_pressure: 0.44
+    chaotic_chaos_pressure: 0.52
     recovering_decay_ratio: 0.05
   order_pressure_weight: 1.0
   chaos_pressure_weight: 1.0
@@ -68,7 +69,7 @@ probability_square:
 
 disruption_field:
   enabled: true
-  shock_arrival_rate: 0.4       # expected shocks per step, whole grid
+  shock_arrival_rate: 0.72      # expected shocks per step, whole grid
   shock_types:
     - congestion_wave
     - accident
@@ -88,7 +89,8 @@ ruin:
   initial_buffer: 120
   recovery_rate: 0.0
   barrier: 0.0
-  sla_threshold: 0.05
+  sla_threshold: 0.05      # SLA: at most 5% of deadlines missed...
+  sla_window: 60           # ...over any 60 consecutive steps
   rule: surplus_or_sla
 
 risk:
@@ -99,6 +101,14 @@ risk:
   report_chaotic_organization: true
   report_var: true
   report_expected_shortfall: true
+  # How well each parameter is known (relative standard deviation), for
+  # `ruin uncertainty`.
+  parameter_uncertainty:
+    disruption_field.shock_arrival_rate: 0.10
+    disruption_field.mean_initial_intensity: 0.10
+    processes.travel_drift: 0.05
+    processes.jump_intensity: 0.20
+    processes.demand_arrival_rate: 0.10
 
 visualization:
   enabled: true
@@ -126,11 +136,17 @@ visualization:
 - `disruption_field` defines shock arrivals, spread, and decay. The field is
   subcritical by construction: `memory_weight * (1 - temporal_decay -
   recovery_rate)` must be below 1, so every shock eventually fades.
-- `ruin` defines the surplus buffer, the barrier, the SLA threshold, and which
-  rule applies (`surplus_or_sla`, `surplus`, or `sla`).
-- `risk` defines the Monte Carlo path count and confidence level.
+- `ruin` defines the surplus buffer, the barrier, the SLA, and which rule
+  applies (`surplus_or_sla`, `surplus`, or `sla`). The SLA is breached when
+  deadlines missed / (deadlines missed + on-time deliveries) over the last
+  `sla_window` steps reaches `sla_threshold`. It is judged only once a full
+  window has been observed.
+- `risk` defines the Monte Carlo path count and confidence level, and
+  `parameter_uncertainty`: how well each parameter is known (relative
+  standard deviation by dotted path; `*` stands for every Q-dot type).
 - `visualization` defines what the GIF shows: the heatmap quantity
-  (`disruption_intensity`, `chaos_pressure`, or `order_pressure`), the number
+  (`disruption_intensity`, `chaos_pressure`, `order_pressure`, or
+  `accumulated_loss`), the number
   of frames spread over the shift, and which overlays are drawn.
 
 ## Keys that are accepted but reserved

@@ -58,6 +58,7 @@ _HEATMAPS: dict[str, tuple[str, str, float | None]] = {
     "disruption_intensity": ("field", "Disruption intensity", EXPOSURE_SATURATION),
     "chaos_pressure": ("chaos_field", "Local chaos pressure", 2.0),
     "order_pressure": ("order_field", "Local order pressure", None),
+    "accumulated_loss": ("loss_field", "Loss accrued in cell so far", None),
 }
 
 _TYPE_COLORS = {"STANDARD": "white", "EXPRESS": "cyan", "BULKY": "orange"}

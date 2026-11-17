@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from typing import Any
 
 import numpy as np
@@ -21,6 +22,15 @@ from ruin.metrics.pressure import (
 from ruin.state_space.disruption_field import DisruptionField
 
 QDOT_TYPES = (QDotType.STANDARD, QDotType.EXPRESS, QDotType.BULKY)
+
+_ACTIVE, _LATE, _DELIVERED, _DELIVERED_LATE, _FAILED = range(5)
+_STATUS_NAMES = (
+    QDotStatus.ACTIVE.value,
+    QDotStatus.LATE.value,
+    QDotStatus.DELIVERED.value,
+    QDotStatus.DELIVERED_LATE.value,
+    QDotStatus.FAILED.value,
+)
 
 
 class ProbabilitySquare:
@@ -106,6 +116,14 @@ class ProbabilitySquare:
         self._late = np.zeros(0, dtype=bool)
         self._exposure = np.zeros(0, dtype=float)
         self._order = np.zeros(0, dtype=float)
+        self._origin_x = np.zeros(0, dtype=int)
+        self._origin_y = np.zeros(0, dtype=int)
+        self._spawn_time = np.zeros(0, dtype=int)
+        self._cost = np.zeros(0, dtype=float)  # delay penalty accrued so far
+
+        # Loss ledger: where loss accrued, and one row per terminated Q dot.
+        self.loss_field = np.zeros(self.width * self.height, dtype=float)
+        self._ledger: list[np.ndarray] = []
 
         self._spawn(np.repeat(np.arange(3), counts))
         self.initial_qdots = int(counts.sum())
@@ -147,23 +165,86 @@ class ProbabilitySquare:
         self._late = np.concatenate([self._late, np.zeros(n, dtype=bool)])
         self._exposure = np.concatenate([self._exposure, np.zeros(n)])
         self._order = np.concatenate([self._order, np.zeros(n)])
+        self._origin_x = np.concatenate([self._origin_x, x])
+        self._origin_y = np.concatenate([self._origin_y, y])
+        self._spawn_time = np.concatenate([self._spawn_time, np.full(n, self.time)])
+        self._cost = np.concatenate([self._cost, np.zeros(n)])
         self.spawned += n
 
+    _STATE_ARRAYS = (
+        "_ids",
+        "_type",
+        "_x",
+        "_y",
+        "_dest_x",
+        "_dest_y",
+        "_slack",
+        "_carry",
+        "_late",
+        "_exposure",
+        "_order",
+        "_origin_x",
+        "_origin_y",
+        "_spawn_time",
+        "_cost",
+    )
+
     def _keep(self, mask: np.ndarray) -> None:
-        for name in (
-            "_ids",
-            "_type",
-            "_x",
-            "_y",
-            "_dest_x",
-            "_dest_y",
-            "_slack",
-            "_carry",
-            "_late",
-            "_exposure",
-            "_order",
-        ):
+        for name in self._STATE_ARRAYS:
             setattr(self, name, getattr(self, name)[mask])
+
+    def fork(self, seed: int | np.random.SeedSequence) -> ProbabilitySquare:
+        """An independent copy of D as it stands now, with a fresh random stream.
+
+        The fork shares the past and nothing of the future: stepping it does
+        not touch this square. Used to branch many possible futures from one
+        present. The copy starts with empty snapshot and ledger histories.
+        """
+        other = copy.copy(self)
+        for name in self._STATE_ARRAYS:
+            setattr(other, name, getattr(self, name).copy())
+        other.field = copy.copy(self.field)
+        other.field.grid = self.field.grid.copy()
+        other.congestion = self.congestion.copy()
+        other.loss_field = self.loss_field.copy()
+        other.snapshots = []
+        other._ledger = []
+        other.rng = np.random.default_rng(seed)
+        return other
+
+    def ledger(self) -> list[dict[str, Any]]:
+        """One row per Q dot that has left D or is still in it, with the loss it carried."""
+        columns = [
+            np.column_stack(
+                [
+                    self._ids,
+                    self._type,
+                    self._origin_x,
+                    self._origin_y,
+                    self._dest_x,
+                    self._dest_y,
+                    self._spawn_time,
+                    np.full(len(self._ids), -1),
+                    np.where(self._late, _LATE, _ACTIVE),
+                    self._cost,
+                ]
+            ),
+            *self._ledger,
+        ]
+        rows = np.concatenate(columns) if columns else np.zeros((0, 10))
+        return [
+            {
+                "id": int(r[0]),
+                "type": QDOT_TYPES[int(r[1])].value,
+                "origin": (int(r[2]), int(r[3])),
+                "destination": (int(r[4]), int(r[5])),
+                "spawn_time": int(r[6]),
+                "end_time": int(r[7]) if r[7] >= 0 else None,
+                "status": _STATUS_NAMES[int(r[8])],
+                "loss": round(float(r[9]), 6),
+            }
+            for r in rows
+        ]
 
     def _records(self, arrived: np.ndarray, failed: np.ndarray) -> list[QDot]:
         records: list[QDot] = []
@@ -264,6 +345,8 @@ class ProbabilitySquare:
             * (1.0 + blocked_fraction(self._exposure[accruing]))
         )
         penalty = float(accrued.sum())
+        self._cost[accruing] += accrued
+        np.add.at(self.loss_field, self._y[accruing] * self.width + self._x[accruing], accrued)
         penalty_by_type = np.bincount(self._type[accruing], weights=accrued, minlength=3)
 
         # 5. Q dots reshape D: lateness and failure add local disruption.
@@ -324,6 +407,7 @@ class ProbabilitySquare:
             "penalty_by_type": [round(float(v), 6) for v in penalty_by_type],
             "income": round(income, 6),
             "late_count": late_count,
+            "missed": int(newly_late.sum()),
             "active_count": active_count,
             "delivered": n_delivered,
             "delivered_late": n_delivered_late,
@@ -338,7 +422,29 @@ class ProbabilitySquare:
                 snapshot["field"] = self.field.snapshot()
                 snapshot["chaos_field"] = np.round(local_chaos.reshape(shape), 4).tolist()
                 snapshot["order_field"] = local_order.reshape(shape).tolist()
+                snapshot["loss_field"] = np.round(self.loss_field.reshape(shape), 4).tolist()
         self.snapshots.append(snapshot)
 
+        leaving = ~in_flight
+        if leaving.any():
+            status = np.where(failed, _FAILED, np.where(was_late, _DELIVERED_LATE, _DELIVERED))[
+                leaving
+            ]
+            self._ledger.append(
+                np.column_stack(
+                    [
+                        self._ids[leaving],
+                        self._type[leaving],
+                        self._origin_x[leaving],
+                        self._origin_y[leaving],
+                        self._dest_x[leaving],
+                        self._dest_y[leaving],
+                        self._spawn_time[leaving],
+                        np.full(int(leaving.sum()), self.time),
+                        status,
+                        self._cost[leaving],
+                    ]
+                )
+            )
         self._keep(in_flight)
         return snapshot

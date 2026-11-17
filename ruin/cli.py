@@ -12,7 +12,9 @@ from pydantic import ValidationError
 from ruin.config import load_ruin_config
 from ruin.config_models import RuinConfig
 from ruin.risk.classical import validate_against_cramer_lundberg
+from ruin.risk.destiny import plot_destiny, run_destiny
 from ruin.risk.ruin_probability import run_monte_carlo
+from ruin.risk.uncertainty import run_parameter_uncertainty, run_sensitivity
 from ruin.simulation.agent_based import run_trajectory
 from ruin.viz.square import save_field_gif, save_text_frames
 
@@ -82,6 +84,41 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help=EXPLAIN_EFFORT_HELP,
     )
+
+    destiny = subparsers.add_parser(
+        "destiny",
+        help="Follow one shift and estimate its remaining destiny (chance of no ruin) over time",
+    )
+    destiny.add_argument("--config", required=True)
+    destiny.add_argument("--seed", type=int, default=None, help="Override the config's seed")
+    destiny.add_argument("--every", type=int, default=24, help="Steps between checkpoints")
+    destiny.add_argument("--branches", type=int, default=64, help="Futures per checkpoint")
+    destiny.add_argument("--max-steps", type=int, default=None)
+    destiny.add_argument("--jobs", type=int, default=None)
+    destiny.add_argument("--plot", metavar="PATH", default=None, help="Write the curve as a PNG")
+
+    sensitivity = subparsers.add_parser(
+        "sensitivity", help="Rank parameters by how strongly they move the ruin probability"
+    )
+    sensitivity.add_argument("--config", required=True)
+    sensitivity.add_argument("--paths", type=int, default=200)
+    sensitivity.add_argument("--step", type=float, default=0.1, help="Relative change applied")
+    sensitivity.add_argument("--jobs", type=int, default=None)
+    sensitivity.add_argument(
+        "--parameter",
+        action="append",
+        default=None,
+        help="Dotted parameter path (repeatable; default: a standard set)",
+    )
+
+    uncertainty = subparsers.add_parser(
+        "uncertainty",
+        help="Ruin probability when the parameters in risk.parameter_uncertainty are uncertain",
+    )
+    uncertainty.add_argument("--config", required=True)
+    uncertainty.add_argument("--draws", type=int, default=40)
+    uncertainty.add_argument("--paths", type=int, default=100, help="Paths per draw")
+    uncertainty.add_argument("--jobs", type=int, default=None)
 
     validate = subparsers.add_parser(
         "validate",
@@ -154,6 +191,8 @@ def main(argv: list[str] | None = None) -> int:
             "final_surplus": result["final_surplus"],
             "min_surplus": result["min_surplus"],
             "loss_by_type": result["loss_by_type"],
+            "loss_concentration": result["loss_concentration"],
+            "top_contributors": result["top_contributors"][:5],
             "final_d_state": result["final_d_state"],
             "delivered": result["delivered"],
             "delivered_late": result["delivered_late"],
@@ -163,6 +202,43 @@ def main(argv: list[str] | None = None) -> int:
         }
         logger.info(json.dumps(summary if not args.json else result, indent=2))
         _maybe_explain(result, config, args.explain, effort=args.explain_effort)
+        return 0
+
+    if args.command == "destiny":
+        result = run_destiny(
+            config,
+            seed=args.seed,
+            every=args.every,
+            branches=args.branches,
+            max_steps=args.max_steps,
+            n_jobs=args.jobs,
+        )
+        if args.plot:
+            logger.info("Destiny curve written to %s", plot_destiny(result, args.plot))
+        result.pop("surplus_path")
+        logger.info(json.dumps(result, indent=2))
+        return 0
+
+    if args.command == "sensitivity":
+        result = run_sensitivity(
+            config,
+            parameters=args.parameter,
+            rel_step=args.step,
+            paths=args.paths,
+            n_jobs=args.jobs,
+        )
+        logger.info(json.dumps(result, indent=2))
+        return 0
+
+    if args.command == "uncertainty":
+        try:
+            result = run_parameter_uncertainty(
+                config, draws=args.draws, paths=args.paths, n_jobs=args.jobs
+            )
+        except ValueError as exc:
+            logger.error("%s", exc)
+            return 2
+        logger.info(json.dumps(result, indent=2))
         return 0
 
     if args.command == "risk":

@@ -10,6 +10,16 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+QDOT_TYPE_NAMES = ("standard", "express", "bulky")
+
+
+def expand_parameter(parameter: str) -> list[str]:
+    """Expand `*` in a dotted parameter path to every Q-dot type."""
+    if "*" not in parameter:
+        return [parameter]
+    return [parameter.replace("*", name) for name in QDOT_TYPE_NAMES]
+
+
 # --- Leaf / sub-models -------------------------------------------------------
 
 
@@ -142,7 +152,10 @@ class RuinParams(BaseModel):
     # Planned capacity recovered per step, independent of completions.
     recovery_rate: float = Field(default=0.0, ge=0)
     barrier: float = 0.0
-    sla_threshold: float = Field(default=0.12, ge=0)
+    # SLA breach: share of deadlines missed over the last `sla_window` steps,
+    # missed / (missed + delivered on time), reaches `sla_threshold`.
+    sla_threshold: float = Field(default=0.12, ge=0, le=1)
+    sla_window: int = Field(default=60, ge=1)
     rule: Literal["surplus_or_sla", "surplus", "sla"] = "surplus_or_sla"
 
 
@@ -156,6 +169,10 @@ class RiskConfig(BaseModel):
     report_chaotic_organization: bool = True
     report_var: bool = True
     report_expected_shortfall: bool = True
+    # Parameters that are only known approximately, by dotted path, with their
+    # relative standard deviation: {"disruption_field.shock_arrival_rate": 0.1}.
+    # `*` stands for every Q-dot type. Used by `ruin uncertainty`.
+    parameter_uncertainty: dict[str, float] = Field(default_factory=dict)
 
 
 class VisualizationConfig(BaseModel):
@@ -168,9 +185,9 @@ class VisualizationConfig(BaseModel):
     show_disruption_field: bool = True
     show_d_state: bool = True
     show_order_chaos_pressure: bool = True
-    heatmap_field: Literal["disruption_intensity", "order_pressure", "chaos_pressure"] = (
-        "disruption_intensity"
-    )
+    heatmap_field: Literal[
+        "disruption_intensity", "order_pressure", "chaos_pressure", "accumulated_loss"
+    ] = "disruption_intensity"
 
 
 # --- Root model --------------------------------------------------------------
@@ -189,6 +206,25 @@ class RuinConfig(BaseModel):
     ruin: RuinParams
     risk: RiskConfig
     visualization: VisualizationConfig
+
+    @model_validator(mode="after")
+    def _uncertain_parameters_exist(self) -> RuinConfig:
+        for parameter, spread in self.risk.parameter_uncertainty.items():
+            if not 0 < spread <= 1:
+                raise ValueError(
+                    f"parameter_uncertainty[{parameter!r}] must be a relative spread in (0, 1]"
+                )
+            for path in expand_parameter(parameter):
+                node: object = self
+                for key in path.split("."):
+                    if not hasattr(node, key):
+                        raise ValueError(f"parameter_uncertainty: unknown parameter {path!r}")
+                    node = getattr(node, key)
+                if isinstance(node, bool) or not isinstance(node, float):
+                    raise ValueError(
+                        f"parameter_uncertainty: {path!r} is not a continuous parameter"
+                    )
+        return self
 
     @model_validator(mode="after")
     def _radius_fits_grid(self) -> RuinConfig:
