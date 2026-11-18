@@ -50,6 +50,7 @@ processes:
   jump_intensity: 0.05       # per-Q-dot rate of sudden setbacks
   jump_mean_size: 2.0        # mean setback, in cells of lost progress
   jump_size_distribution: exponential
+  avoidance: 0.0             # how strongly Q dots steer around blocked cells (0 = not at all)
 
 probability_square:
   base_risk_intensity: 0.0
@@ -128,6 +129,7 @@ visualization:
   show_qdot_types: true
   show_ruin_event: true
   show_disruption_field: true
+  show_jams: true
   show_d_state: true
   show_order_chaos_pressure: true
   heatmap_field: disruption_intensity

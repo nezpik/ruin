@@ -59,6 +59,7 @@ processes:
   jump_intensity: 0.05       # per-Q-dot rate of sudden setbacks
   jump_mean_size: 2.0        # mean setback, in cells of lost progress
   jump_size_distribution: exponential
+  avoidance: 0.0             # how strongly Q dots steer around blocked cells (0 = not at all)
 
 probability_square:
   base_risk_intensity: 0.0
@@ -137,6 +138,7 @@ visualization:
   show_qdot_types: true
   show_ruin_event: true
   show_disruption_field: true
+  show_jams: true
   show_d_state: true
   show_order_chaos_pressure: true
   heatmap_field: disruption_intensity
@@ -148,7 +150,10 @@ visualization:
 - `qdots` defines the initial population and the per-type time window, delay
   penalty, speed, and on-time completion reward. New arrivals use the same mix.
 - `processes` defines demand arrivals and the jump-diffusion that moves each
-  Q dot toward its destination.
+  Q dot toward its destination. `avoidance` lets a Q dot steer around
+  blocked cells: it weights its two forward moves by `exp(-avoidance * how blocked
+  the next cell on that axis is)`, so 0 is the old behaviour. It cuts pile-up in
+  jams but opens no routes, because trips stay monotone.
 - `probability_square.regime` defines the hidden regime of D: a four-level chain
   (stable, stressed, disrupted, chaotic) that generates disruption. `escalate` and
   `relax` are per-step chances of moving up from level k and down to level k;
@@ -175,7 +180,7 @@ visualization:
 - `risk` defines the Monte Carlo path count and confidence level, and
   `parameter_uncertainty`: how well each parameter is known (relative
   standard deviation by dotted path; `*` stands for every Q-dot type).
-- `visualization` defines what the GIF shows: the heatmap quantity
+- `visualization` defines what the GIF shows (`show_jams` outlines the jams): the heatmap quantity
   (`disruption_intensity`, `chaos_pressure`, `order_pressure`, or
   `accumulated_loss`), the number
   of frames spread over the shift, and which overlays are drawn.

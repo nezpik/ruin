@@ -4,7 +4,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.11--3.14-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![v0.8.0](https://img.shields.io/badge/Version-v0.8.0-green.svg)](https://github.com/nezpik/ruin)
+[![v0.9.0](https://img.shields.io/badge/Version-v0.9.0-green.svg)](https://github.com/nezpik/ruin)
 
 RUIN is a research-grade framework for measuring when physical logistics systems run out of destiny. It translates quantitative finance concepts (ruin theory, jump-diffusion, Monte Carlo paths, VaR, Expected Shortfall, bootstrap confidence intervals) into a logistics language built around **physical uncertainty**, **service failure**, and **systemic collapse**.
 
@@ -212,7 +212,7 @@ Scored against what actually happened, every view beats a constant forecast (Bri
 `ruin risk` answers "how often does a shift like this ruin?". `ruin destiny` answers the question the project is named for: *how much destiny does this shift have left, right now?*
 
 ```bash
-uv run ruin destiny --config examples/urban_ruin_shift.yaml --seed 81 --blind --plot destiny.png
+uv run ruin destiny --config examples/urban_ruin_shift.yaml --seed 81 --blind --observer --incidents --plot destiny.png
 ```
 
 It follows one shift. Every 24 steps it freezes the exact present (every Q dot, every cell of the disruption field, the surplus, the SLA window, the hidden regime) and plays 64 independent futures forward from it. The share that reach the end of the shift without ruin is the shift's **remaining destiny** at that moment:
@@ -225,9 +225,60 @@ destiny(t) = P(no ruin before the horizon | everything known at t)
 
 This shift ran calm for over 200 steps at about 90% destiny. Then the regime escalated, from stressed to disrupted to chaotic, and the destiny fell to 56% at step 264 and 30% at step 288, then to nothing, and the shift ruined at step 339 by breaching the SLA. Look at the bottom panel: **surplus was at its highest (245) when the crisis began**. A surplus chart sees nothing wrong until it is too late; the buffer the shift would have needed for a 95% chance of safety jumped from about 250 to over 1,100.
 
-The `--blind` curve is destiny for someone who knows everything about D except which regime it is in (the regime is redrawn from its long-run mix). At step 264 it still says 89%, against 56% for someone who knows the regime, and at step 288 it says 83% against 30%. The gap is what knowing the regime is worth. An observer who sees the pressures sits between the two curves: in this shift the D-state label read CHAOTIC at step 264, a regime ahead of the truth.
+The chart shows three views of the same shift. The solid curve knows everything about D, including the hidden regime. The dotted curve is an observer who sees the pressures and an incident log (see [the observer](#seeing-the-regime-the-observer)). The dashed curve knows everything except the regime, which it redraws from its long-run mix. At step 264 the three say 56%, 66%, and 89%; at step 288, 30%, 41%, and 83%. The gap between the solid and dashed curves is what knowing the regime is worth, and the dotted curve shows how much of it can be had by watching.
+
+This is a crisis chosen to make the point. Over 32 unselected shifts the observer closes about a third of that gap in severe regimes, not the three quarters it appears to here.
 
 At `t = 0` the remaining destiny is one minus the ruin probability, so the two commands cross-check each other.
+
+---
+
+## Chaotic Organization
+
+Disruption is not only disorder. Blocked regions form, persist, merge, and clear; Q dots pile up in them; loss concentrates in them. `ruin organize` measures that structure.
+
+```bash
+uv run ruin organize --config examples/urban_ruin_shift.yaml                                     # a typical shift
+uv run ruin organize --config examples/urban_ruin_shift.yaml --seed 81 --plot organization.png   # one shift
+```
+
+![Organization of one shift](docs/organization_seed81.png)
+
+A **jam** is a connected region where disruption blocks at least half a cell (at least three cells). Jams are tracked from step to step, so each has a birth, a lifetime, a peak, merges and splits, and a record of the Q dots and loss that passed through it. Around them the recorder measures **pile-up** (Q-dot density inside jams over the same cells' own baseline), **diversion** (flow beside jams, which is not density: Q dots also queue there), **corridors** (persistent excess flow beside jams, kept only if it is statistically significant and at least three cells long), **pressure zones** and whether they stay put, **recovery** after a jam clears, and **ruin zones**: where loss concentrates and which jam carried it before ruin. Every comparison uses each cell's own quiet-step baseline, so the geometry of `D` is not mistaken for organization.
+
+Over 80 shifts, with the memoryless version of the scenario matched to the same realised mean disruption (± is the standard error across shifts):
+
+| | Memoryless disruption | Hidden regime (the reference) |
+| --- | --- | --- |
+| Jams born per 100 steps | 33.9 ± 0.2 | 31.0 ± 0.4 |
+| Median jam lifetime (steps) | 9.8 ± 0.1 | 9.0 ± 0.1 |
+| Largest jam in a shift (cells of 900) | 161 ± 4 | 230 ± 16 |
+| Q-dot pile-up inside jams (× baseline density) | 2.14 ± 0.01 | 2.21 ± 0.01 |
+| Flow beside jams (× baseline flow) | 0.92 ± 0.00 | 0.91 ± 0.00 |
+| Share of loss accrued inside jams | 48% | 53% |
+| Corridors per shift | 0.03 | 0.00 |
+| Do pressure hotspots stay put? (correlation between halves) | 0.11 | 0.12 |
+
+What it shows:
+
+- **Jams are everywhere and cheap to form.** About one new jam every three steps, living nine steps, occupying about a tenth of cell-steps and carrying over half the loss (five times what their size would suggest).
+- **The regime does not change typical jams. It fattens the tail.** Jam counts, lifetimes, pile-up, and recovery are the same in both worlds. What differs is the largest jam: 230 cells against 161. In the seven ruined shifts, the jam that took the shift averaged 486 cells, over half the grid, carried 57% (± 7%) of the loss in the 24 steps before ruin, and was born in a disrupted or chaotic regime in six of seven. Ruin here is not many local jams adding up; it is one system-wide gridlock.
+- **There is no spatial organization beyond jams.** Flow beside a jam is about 9% below baseline (Q dots queue, they do not funnel), corridors do not form, and pressure hotspots do not persist between the halves of a shift (correlation 0.12). Shocks land uniformly and trips are monotone, so there is nothing to route around and nowhere to route to. Corridors and persistent zones need real topology.
+- **Jams clear in about eight steps from their peak**, and Q dots flow back into the cleared cells at 1.45 times the usual density: a re-entry surge.
+- **Cause and effect are separated in time.** Delay is attributed to the origin of the disruption (each hidden regime, or feedback from late Q dots; the origins add up exactly to the field). Pooled over the shifts: stable 53%, stressed 25%, disrupted 15%, chaotic 8%, feedback 0.05%. But the loss accrues in different proportions (stable 34%, stressed 17%, disrupted 35%, chaotic 14%): the disrupted and chaotic regimes are 9% of the time, 22% of the delay, and 49% of the loss, because lateness compounds. Feedback from late Q dots is negligible at the configured weight.
+
+### Steering is worth something, though not routes
+
+`processes.avoidance` lets a Q dot weight its two forward moves by how blocked the next cell on each axis is (0 is the old behaviour). Over 400 paths each:
+
+| Steering (`processes.avoidance`) | Ruin probability (95% interval) | Mean loss (95% interval) | Expected shortfall | Pile-up inside jams |
+| --- | --- | --- | --- | --- |
+| 0 | 15.5% (12.3 to 19.4) | 183 (157 to 213) | 1267 | 2.22 |
+| 1 | 14.2% (11.2 to 18.0) | 155 (136 to 180) | 981 | 2.10 |
+| 3 | 12.8% (9.8 to 16.4) | 131 (112 to 150) | 803 | 1.81 |
+| 8 | 9.5% (7.0 to 12.8) | 104 (87 to 124) | 836 | 1.52 |
+
+Steering cuts pile-up and loss steadily: at the strongest setting mean loss falls by 43% (intervals 87 to 124 against 157 to 213) and ruin falls from 15.5% to 9.5%, though the ruin intervals overlap and it is the monotone trend across four settings that persuades. It does not open routes: flow beside jams stays between 0.90 and 0.95 of baseline and corridors stay at zero, because a Q dot with monotone trips can choose between its two forward moves but cannot detour. What steering buys is not getting stuck in a jam. This is rerouting with perfect local information at no cost; a real operator has delay and incomplete information, which is where the observer comes in.
 
 ---
 
@@ -371,7 +422,7 @@ Full definitions and deeper philosophy are in `RUIN.md`.
 
 ---
 
-## Current Architecture (v0.8.0)
+## Current Architecture (v0.9.0)
 
 ```
 ruin/
@@ -383,6 +434,11 @@ ruin/
 │   ├── probability_square.py   # Main engine: Q dots as arrays, one step of D
 │   ├── disruption_field.py     # Subcritical spread-and-decay field
 │   └── regime.py               # The hidden regime of D
+├── inference/
+│   └── observer.py             # Bayes filter over the hidden regime
+├── analysis/
+│   ├── organization.py         # Jam tracking, pile-up, corridors, zones, ruin zones
+│   └── report.py               # Aggregate report and the organization chart
 ├── simulation/
 │   └── agent_based.py
 ├── risk/
@@ -471,7 +527,7 @@ If you use RUIN, its concepts, terminology, code, or experimental outputs in aca
 
 Suggested citation:
 
-> Zouiti, Naji. RUIN: Ruin-probability Unified In Networks. v0.8.0, 2026.  
+> Zouiti, Naji. RUIN: Ruin-probability Unified In Networks. v0.9.0, 2026.  
 > GitHub: https://github.com/nezpik/ruin
 
 BibTeX:
@@ -481,7 +537,7 @@ BibTeX:
   author = {Zouiti, Naji},
   title = {RUIN: Ruin-probability Unified In Networks},
   year = {2026},
-  version = {0.8.0},
+  version = {0.9.0},
   url = {https://github.com/nezpik/ruin}
 }
 ```

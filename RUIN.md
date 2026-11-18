@@ -4,11 +4,11 @@
 
 [![Python](https://img.shields.io/badge/Python-3.11--3.14-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![v0.7.0](https://img.shields.io/badge/Version-v0.7.0-green.svg)](https://github.com/nezpik/ruin)
+[![v0.9.0](https://img.shields.io/badge/Version-v0.9.0-green.svg)](https://github.com/nezpik/ruin)
 
 RUIN is a framework for measuring and visualizing logistics systems as stochastic risk-bearing portfolios. It translates quantitative finance concepts such as Cramér-Lundberg ruin theory, jump diffusion, geometric Brownian motion, Monte Carlo paths, VaR, and Expected Shortfall into a logistics language built around physical uncertainty, service failure, and systemic collapse.
 
-> **Status (v0.7)**: This document is the conceptual foundation and north star. The engine now implements it with completable Q dots, a decaying disruption field, and a risk layer validated against classical ruin theory. Where the implemented formulas differ from the first sketches below, the section "Formulas as implemented" says how.
+> **Status (v0.9)**: This document is the conceptual foundation and north star. The engine now implements it with completable Q dots, a decaying disruption field, and a risk layer validated against classical ruin theory. Where the implemented formulas differ from the first sketches below, the section "Formulas as implemented" says how.
 
 The central object is the **Probability Square**: an abstract two-dimensional destiny frame `D` where many **Q dots** move through possible physical futures. RUIN is not trying to make logistics look deterministic, and it is not trying to predict destiny perfectly. RUIN frames chaos so that physical uncertainty can move, take shape, and become measurable.
 
@@ -80,6 +80,8 @@ Examples include:
 - congestion pressure zones,
 - recovery pockets after disruption decay,
 - and ruin zones where order pressure can no longer overcome chaos pressure.
+
+As measured (v0.9, `ruin organize`): jams, the first of these structures, are everywhere. About one forms every three steps, lives nine, occupies a tenth of cell-steps, and carries over half the loss. The hidden regime does not change typical jams but fattens the tail: ruin comes from one system-wide gridlock averaging over half the grid, not from many local jams adding up. Q dots pile up in jams and queue beside them; they do not funnel past them. Corridors and persistent pressure zones do not form in this model, because shocks land uniformly and trips are monotone, so they are left for a model with real topology. Where Q dots can steer (`processes.avoidance`), they get stuck less, but still open no routes.
 
 ### D-state transition
 

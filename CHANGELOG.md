@@ -7,6 +7,164 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.0] - 2026-11
+
+**Chaotic organization**: the structure that forms when Q dots try to keep
+order in a chaotic D is now measured, with the findings that came out of it,
+an opt-in steering lever, and exact attribution of delay by origin. Everything
+new is off by default and the 0.8.0 model is reproduced exactly when it is.
+
+### Added
+
+- **`ruin organize`** (`ruin/analysis/organization.py`, `report.py`): a
+  `StructureRecorder` that watches the engine and measures
+  - **jams** (connected regions where disruption blocks at least half a cell, at
+    least three cells), tracked step to step with birth, lifetime, merges,
+    splits, peak extent, and the Q dots and loss that passed through them;
+  - **pile-up** (Q-dot density inside jams over each cell's own baseline);
+  - **diversion** and **corridors**, measured on *flow* rather than density
+    (Q dots also queue beside a jam, and queueing is not diversion), with a
+    significance test and a minimum of three cells;
+  - **pressure zones** and whether they persist between the halves of a shift;
+  - **recovery** (steps from peak to clear, flow back into cleared cells);
+  - **ruin zones** (loss concentration, the share accrued inside jams, and which
+    jam carried the loss in the 24 steps before ruin).
+
+  Every comparison uses a per-cell baseline from quiet steps (no jam within two
+  cells and none in the last eight steps), so the geometry of `D` is not read as
+  organization. `--plot` draws one shift: the jam timeline with the hidden
+  regime, where loss accrued with the ruin jam outlined, and cause against
+  effect. `run_trajectory` takes `recorder=`; `result["structure"]` holds the
+  summary.
+- **`processes.avoidance`** (default 0): a Q dot weights its two forward moves by
+  `exp(-avoidance * how blocked the next cell on that axis is)`. Bit-for-bit the
+  old model at 0.
+- **Attribution of delay by origin** (`run_trajectory(attribute_sources=True)`): a
+  parallel field per origin of disruption (each hidden regime level, or one
+  exogenous origin without regimes, plus feedback from late Q dots). The field
+  dynamics are linear, so the origins add up exactly to the field (tested every
+  step). Each step's field-induced delay is split among them by their share of
+  the intensity where each Q dot stands.
+- `loss_by_regime` (loss accrued while D was in each regime), always reported
+  when regimes are on.
+- `visualization.show_jams` outlines jams in the animation.
+- `ProbabilitySquare.fork` carries the origin fields.
+
+### What the analysis showed
+
+Over 80 shifts, against the memoryless version of the scenario matched to the
+same realised mean disruption:
+
+- **The regime does not change typical jams. It fattens the tail.** Jams born per
+  100 steps 31.0 against 33.9, median lifetime 9.0 against 9.8 steps, pile-up
+  2.21 against 2.14, recovery the same. The largest jam in a shift is 230 cells
+  against 161. In the seven ruined shifts the jam that took the shift averaged
+  486 cells (over half the grid), carried 57% (standard error 7%) of the loss in
+  the 24 steps before ruin, and was born in a disrupted or chaotic regime in six
+  of seven. Ruin here is one system-wide gridlock, not many local jams.
+- **Jams carry half the loss in a tenth of the space**: 53% of loss accrues
+  inside jam cells, which are about 11% of cell-steps (enrichment 5.0).
+- **There is no spatial organization beyond jams.** Flow beside jams is 0.91 of
+  baseline (Q dots queue, they do not funnel), no corridors form, and pressure
+  hotspots do not persist (correlation between halves 0.12). Shocks land
+  uniformly and trips are monotone.
+- **Cause and effect are separated in time.** Delay by origin: stable 53%,
+  stressed 25%, disrupted 15%, chaotic 8%, feedback 0.05%. Loss by regime when
+  it accrued: 34%, 17%, 35%, 14%. The disrupted and chaotic regimes are 9% of the
+  time, 22% of the delay, and 49% of the loss, because lateness compounds.
+  Feedback from late Q dots is negligible at the configured weight.
+- **Steering buys not getting stuck, not routes.** Over 400 paths per setting,
+  avoidance 0, 1, 3, 8: pile-up 2.22, 2.10, 1.81, 1.52; mean loss 183, 155, 131,
+  104 (a 43% fall, intervals 87 to 124 against 157 to 213); ruin probability
+  15.5%, 14.2%, 12.8%, 9.5% (intervals overlap; the monotone trend is the
+  evidence). Flow beside jams stays between 0.90 and 0.95 and corridors stay at
+  zero.
+
+### Process notes
+
+- The tests caught two flaws in my own measures. The baseline first included the
+  steps right after a jam clears, when traffic surges back, which inflated it and
+  understated the surge (1.47 instead of about 1.9); and a "null" hotspot test
+  that wandered inside a patch was correlated through geometry.
+- The first diversion and corridor measures used density and reported about 50
+  one- and two-cell "corridors" per shift, none distinguishable from chance, and
+  diversion did not respond to steering. Moving to flow, adding a significance
+  test, and requiring three cells gave a detector that says "none" when there is
+  none.
+
+### Known limits
+
+- Corridors and persistent pressure zones cannot form here: shocks are uniform,
+  trips are monotone, and a Q dot cannot detour. They need real topology.
+- Steering is perfect local information at no cost.
+- `shock_types` stays reserved: types have no mechanics, so attributing to them
+  would be arbitrary. Attribution is by hidden regime and by feedback.
+- Attribution splits *delay*, not loss, which is a nonlinear function of delay.
+
+---
+
+## [0.8.0] - 2026-11
+
+**The observer**: a calibrated Bayes filter over the hidden regime, so that
+anything triggered on what can be seen is evaluated honestly instead of on the
+true regime.
+
+### Added
+
+- **`ruin/inference/observer.py`**: an exact Bayes filter over the four regimes.
+  The chain's transitions depend only on pressures the observer sees, so the
+  prediction step is exact. The pressure likelihood is a per-regime
+  Markov-switching VAR(3) of log chaos pressure and order pressure, fitted by
+  least squares on simulated shifts with known regimes. An optional incident feed
+  (shocks per step) adds an exact Poisson likelihood.
+- **`ruin observer`** fits the filter and scores it against the true regime on
+  held-out shifts: log score, Brier, calibration, and precision, recall, and
+  detection delay for the flag "disrupted or worse", against the stationary prior
+  and the D-state label.
+- **`ruin destiny --observer [--incidents]`** adds a third destiny view (the
+  observer's), between knowing the regime and knowing nothing. Rows gain
+  `regime_posterior` and `destiny_observer`.
+- `ProbabilitySquare.redraw_regime(probabilities)`.
+- The destiny chart draws all three views with distinct line styles and markers
+  (colour-vision separation of the palette passes the validator).
+
+### What the analysis showed
+
+- **The first version was worse than ignoring the pressures.** One lag and an
+  untempered likelihood gave a log score of -0.80 against -0.77 for the
+  stationary prior, and "96% disrupted or worse" came true 71% of the time:
+  successive readings are not independent given the regime, because the field
+  remembers. Three lags, a likelihood temperature (0.4) chosen on held-out
+  shifts, and a per-regime log-odds bias (the filter over-weighted the severe
+  regimes) fixed it.
+- **On 80 held-out shifts** (38,000 steps): log score -0.541 against -0.750 for
+  the prior, Brier 0.299 against 0.393, mid-range calibration gap 0.043 (0.16
+  before the bias). With an incident feed -0.474, 0.262, and 0.024. At the same
+  recall as the D-state label (0.57), the filter flags disrupted-or-worse spells
+  with precision 0.71 (0.79 with incidents) against 0.48. At a plain 50% cut-off
+  it notices the start of a spell later than the label (about 10 steps against
+  2.5) in exchange for far fewer false alarms.
+- **An observer recovers about a third of what a clairvoyant knows.** Over 32
+  unselected shifts (6 ruined), in the checkpoints where the true regime was
+  disrupted or chaotic, the observer closes 31% (95% interval 14% to 43%) of the
+  gap between knowing nothing about the regime and knowing it, and 36% (21% to
+  47%) with incidents. Against realised ruin, every view beats a constant
+  forecast (Brier 0.080 knowing the regime, 0.086 with incidents, 0.090 from
+  pressures, 0.091 knowing nothing, 0.109 constant), but the observer cannot be
+  separated from knowing nothing with six ruined shifts.
+
+### Known limits
+
+- The emission model is fitted with the true regime labels, which a real
+  operator never has; a real filter would fit on unlabelled history and should do
+  somewhat worse.
+- An observer is fitted to one scenario and filters with that scenario's regime
+  model.
+- The bias correction is applied only once pressure evidence has entered the
+  belief, so the belief at step 0 is exactly the prior.
+
+---
+
 ## [0.7.0] - 2026-11
 
 **A regime-driven D**: disruption now has structure. D has a hidden regime that
