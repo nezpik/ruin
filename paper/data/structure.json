@@ -1,0 +1,62 @@
+{
+ "paths": 400,
+ "matched_mean_shock_mass_per_step": 148.3329,
+ "variants": {
+  "thin": {
+   "ruin_probability": 0.0,
+   "ruin_probability_ci": [
+    0.0,
+    0.0095
+   ],
+   "ruin_by_surplus": 0,
+   "ruin_by_sla": 0,
+   "mean_loss": 84.4867,
+   "value_at_risk": 156.163,
+   "expected_shortfall": 193.9754,
+   "mean_on_time_rate": 0.9949
+  },
+  "heavy_tails": {
+   "ruin_probability": 0.0,
+   "ruin_probability_ci": [
+    0.0,
+    0.0095
+   ],
+   "ruin_by_surplus": 0,
+   "ruin_by_sla": 0,
+   "mean_loss": 84.6688,
+   "value_at_risk": 171.788,
+   "expected_shortfall": 221.4631,
+   "mean_on_time_rate": 0.9949
+  },
+  "clustered": {
+   "ruin_probability": 0.1175,
+   "ruin_probability_ci": [
+    0.0895,
+    0.1528
+   ],
+   "ruin_by_surplus": 38,
+   "ruin_by_sla": 9,
+   "mean_loss": 147.121,
+   "value_at_risk": 535.682,
+   "expected_shortfall": 943.3448,
+   "mean_on_time_rate": 0.993
+  },
+  "full": {
+   "ruin_probability": 0.155,
+   "ruin_probability_ci": [
+    0.1228,
+    0.1937
+   ],
+   "ruin_by_surplus": 51,
+   "ruin_by_sla": 11,
+   "mean_loss": 182.5742,
+   "value_at_risk": 726.373,
+   "expected_shortfall": 1267.3722,
+   "mean_on_time_rate": 0.9919
+  }
+ },
+ "ruin_probability_range": [
+  0.0,
+  0.155
+ ]
+}

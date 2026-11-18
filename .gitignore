@@ -24,3 +24,10 @@ uv.lock
 .vscode/
 *.swp
 *~
+
+# LaTeX build products and figure previews
+paper/*.aux
+paper/*.log
+paper/*.out
+paper/build.log
+paper/figures/*.png

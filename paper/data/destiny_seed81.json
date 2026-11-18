@@ -1,0 +1,502 @@
+{
+ "seed": 81,
+ "observer": {
+  "incidents": true
+ },
+ "horizon": 480,
+ "branches": 64,
+ "confidence_level": 0.95,
+ "ruined": true,
+ "ruin_time": 339,
+ "ruin_reason": "sla",
+ "final_surplus": 14.0496,
+ "initial_destiny": 0.9062,
+ "lowest_destiny": 0.0,
+ "lowest_destiny_time": 312,
+ "curve": [
+  {
+   "time": 0,
+   "surplus": 120.0,
+   "d_state": "STABLE",
+   "regime": "STABLE",
+   "chaos_pressure": 0.0,
+   "destiny": 0.9062,
+   "destiny_ci": [
+    0.8102,
+    0.9563
+   ],
+   "required_buffer": 432.0218,
+   "expected_future_loss": 150.4525,
+   "futures_ruined_by_surplus": 4,
+   "futures_ruined_by_sla": 2,
+   "destiny_blind": 0.8906,
+   "destiny_blind_ci": [
+    0.791,
+    0.946
+   ],
+   "destiny_observer": 0.8906,
+   "destiny_observer_ci": [
+    0.791,
+    0.946
+   ],
+   "regime_posterior": [
+    0.6623,
+    0.1987,
+    0.0993,
+    0.0397
+   ]
+  },
+  {
+   "time": 24,
+   "surplus": 131.95,
+   "d_state": "STABLE",
+   "regime": "STRESSED",
+   "chaos_pressure": 0.1767,
+   "destiny": 0.9062,
+   "destiny_ci": [
+    0.8102,
+    0.9563
+   ],
+   "required_buffer": 644.5657,
+   "expected_future_loss": 175.4277,
+   "futures_ruined_by_surplus": 3,
+   "futures_ruined_by_sla": 3,
+   "destiny_blind": 0.8438,
+   "destiny_blind_ci": [
+    0.7357,
+    0.9129
+   ],
+   "destiny_observer": 0.8906,
+   "destiny_observer_ci": [
+    0.791,
+    0.946
+   ],
+   "regime_posterior": [
+    0.9155,
+    0.0837,
+    0.0008,
+    0.0
+   ]
+  },
+  {
+   "time": 48,
+   "surplus": 146.3826,
+   "d_state": "STABLE",
+   "regime": "STABLE",
+   "chaos_pressure": 0.2184,
+   "destiny": 0.9531,
+   "destiny_ci": [
+    0.871,
+    0.9839
+   ],
+   "required_buffer": 138.9614,
+   "expected_future_loss": 132.4524,
+   "futures_ruined_by_surplus": 1,
+   "futures_ruined_by_sla": 2,
+   "destiny_blind": 0.8438,
+   "destiny_blind_ci": [
+    0.7357,
+    0.9129
+   ],
+   "destiny_observer": 0.875,
+   "destiny_observer_ci": [
+    0.7723,
+    0.9353
+   ],
+   "regime_posterior": [
+    0.9183,
+    0.0802,
+    0.0015,
+    0.0
+   ]
+  },
+  {
+   "time": 72,
+   "surplus": 155.114,
+   "d_state": "STABLE",
+   "regime": "STABLE",
+   "chaos_pressure": 0.1327,
+   "destiny": 0.8906,
+   "destiny_ci": [
+    0.791,
+    0.946
+   ],
+   "required_buffer": 284.0895,
+   "expected_future_loss": 132.6729,
+   "futures_ruined_by_surplus": 5,
+   "futures_ruined_by_sla": 2,
+   "destiny_blind": 0.9375,
+   "destiny_blind_ci": [
+    0.85,
+    0.9754
+   ],
+   "destiny_observer": 0.9375,
+   "destiny_observer_ci": [
+    0.85,
+    0.9754
+   ],
+   "regime_posterior": [
+    0.9847,
+    0.0153,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "time": 96,
+   "surplus": 170.6125,
+   "d_state": "STABLE",
+   "regime": "STABLE",
+   "chaos_pressure": 0.1001,
+   "destiny": 0.8906,
+   "destiny_ci": [
+    0.791,
+    0.946
+   ],
+   "required_buffer": 340.2592,
+   "expected_future_loss": 132.1834,
+   "futures_ruined_by_surplus": 5,
+   "futures_ruined_by_sla": 2,
+   "destiny_blind": 0.8594,
+   "destiny_blind_ci": [
+    0.7538,
+    0.9242
+   ],
+   "destiny_observer": 0.8906,
+   "destiny_observer_ci": [
+    0.791,
+    0.946
+   ],
+   "regime_posterior": [
+    0.9521,
+    0.0477,
+    0.0003,
+    0.0
+   ]
+  },
+  {
+   "time": 120,
+   "surplus": 184.0625,
+   "d_state": "STABLE",
+   "regime": "STABLE",
+   "chaos_pressure": 0.0909,
+   "destiny": 0.9531,
+   "destiny_ci": [
+    0.871,
+    0.9839
+   ],
+   "required_buffer": 78.5179,
+   "expected_future_loss": 83.5484,
+   "futures_ruined_by_surplus": 0,
+   "futures_ruined_by_sla": 3,
+   "destiny_blind": 0.8906,
+   "destiny_blind_ci": [
+    0.791,
+    0.946
+   ],
+   "destiny_observer": 0.9062,
+   "destiny_observer_ci": [
+    0.8102,
+    0.9563
+   ],
+   "regime_posterior": [
+    0.9836,
+    0.0164,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "time": 144,
+   "surplus": 198.4925,
+   "d_state": "STABLE",
+   "regime": "STABLE",
+   "chaos_pressure": 0.0968,
+   "destiny": 0.9375,
+   "destiny_ci": [
+    0.85,
+    0.9754
+   ],
+   "required_buffer": 219.4471,
+   "expected_future_loss": 89.6652,
+   "futures_ruined_by_surplus": 2,
+   "futures_ruined_by_sla": 2,
+   "destiny_blind": 0.9219,
+   "destiny_blind_ci": [
+    0.8298,
+    0.9662
+   ],
+   "destiny_observer": 0.9375,
+   "destiny_observer_ci": [
+    0.85,
+    0.9754
+   ],
+   "regime_posterior": [
+    0.9802,
+    0.0198,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "time": 168,
+   "surplus": 211.7325,
+   "d_state": "STABLE",
+   "regime": "STABLE",
+   "chaos_pressure": 0.099,
+   "destiny": 0.9219,
+   "destiny_ci": [
+    0.8298,
+    0.9662
+   ],
+   "required_buffer": 416.0851,
+   "expected_future_loss": 96.1906,
+   "futures_ruined_by_surplus": 4,
+   "futures_ruined_by_sla": 1,
+   "destiny_blind": 0.9219,
+   "destiny_blind_ci": [
+    0.8298,
+    0.9662
+   ],
+   "destiny_observer": 0.9219,
+   "destiny_observer_ci": [
+    0.8298,
+    0.9662
+   ],
+   "regime_posterior": [
+    0.9883,
+    0.0117,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "time": 192,
+   "surplus": 225.6725,
+   "d_state": "STABLE",
+   "regime": "STABLE",
+   "chaos_pressure": 0.1873,
+   "destiny": 0.9219,
+   "destiny_ci": [
+    0.8298,
+    0.9662
+   ],
+   "required_buffer": 305.0717,
+   "expected_future_loss": 89.2375,
+   "futures_ruined_by_surplus": 2,
+   "futures_ruined_by_sla": 3,
+   "destiny_blind": 0.9219,
+   "destiny_blind_ci": [
+    0.8298,
+    0.9662
+   ],
+   "destiny_observer": 0.9062,
+   "destiny_observer_ci": [
+    0.8102,
+    0.9563
+   ],
+   "regime_posterior": [
+    0.9299,
+    0.0691,
+    0.001,
+    0.0
+   ]
+  },
+  {
+   "time": 216,
+   "surplus": 237.4225,
+   "d_state": "STABLE",
+   "regime": "STRESSED",
+   "chaos_pressure": 0.1943,
+   "destiny": 0.9375,
+   "destiny_ci": [
+    0.85,
+    0.9754
+   ],
+   "required_buffer": 253.2915,
+   "expected_future_loss": 103.7833,
+   "futures_ruined_by_surplus": 3,
+   "futures_ruined_by_sla": 1,
+   "destiny_blind": 0.9062,
+   "destiny_blind_ci": [
+    0.8102,
+    0.9563
+   ],
+   "destiny_observer": 0.9219,
+   "destiny_observer_ci": [
+    0.8298,
+    0.9662
+   ],
+   "regime_posterior": [
+    0.8567,
+    0.1421,
+    0.0012,
+    0.0
+   ]
+  },
+  {
+   "time": 240,
+   "surplus": 241.2344,
+   "d_state": "DISRUPTED",
+   "regime": "STRESSED",
+   "chaos_pressure": 0.424,
+   "destiny": 0.8594,
+   "destiny_ci": [
+    0.7538,
+    0.9242
+   ],
+   "required_buffer": 495.9688,
+   "expected_future_loss": 169.7608,
+   "futures_ruined_by_surplus": 3,
+   "futures_ruined_by_sla": 6,
+   "destiny_blind": 0.9062,
+   "destiny_blind_ci": [
+    0.8102,
+    0.9563
+   ],
+   "destiny_observer": 0.7656,
+   "destiny_observer_ci": [
+    0.6487,
+    0.8525
+   ],
+   "regime_posterior": [
+    0.0231,
+    0.6328,
+    0.3282,
+    0.0159
+   ]
+  },
+  {
+   "time": 264,
+   "surplus": 244.5804,
+   "d_state": "CHAOTIC",
+   "regime": "DISRUPTED",
+   "chaos_pressure": 0.5876,
+   "destiny": 0.5625,
+   "destiny_ci": [
+    0.4409,
+    0.6771
+   ],
+   "required_buffer": 1115.4845,
+   "expected_future_loss": 363.4604,
+   "futures_ruined_by_surplus": 13,
+   "futures_ruined_by_sla": 15,
+   "destiny_blind": 0.8906,
+   "destiny_blind_ci": [
+    0.791,
+    0.946
+   ],
+   "destiny_observer": 0.6562,
+   "destiny_observer_ci": [
+    0.534,
+    0.7608
+   ],
+   "regime_posterior": [
+    0.0278,
+    0.2455,
+    0.6696,
+    0.0572
+   ]
+  },
+  {
+   "time": 288,
+   "surplus": 222.8886,
+   "d_state": "CHAOTIC",
+   "regime": "CHAOTIC",
+   "chaos_pressure": 0.6106,
+   "destiny": 0.2969,
+   "destiny_ci": [
+    0.1991,
+    0.4177
+   ],
+   "required_buffer": 852.438,
+   "expected_future_loss": 467.4183,
+   "futures_ruined_by_surplus": 23,
+   "futures_ruined_by_sla": 22,
+   "destiny_blind": 0.8281,
+   "destiny_blind_ci": [
+    0.7179,
+    0.9012
+   ],
+   "destiny_observer": 0.4062,
+   "destiny_observer_ci": [
+    0.2946,
+    0.5285
+   ],
+   "regime_posterior": [
+    0.0002,
+    0.0434,
+    0.6098,
+    0.3465
+   ]
+  },
+  {
+   "time": 312,
+   "surplus": 185.9946,
+   "d_state": "CHAOTIC",
+   "regime": "CHAOTIC",
+   "chaos_pressure": 0.8809,
+   "destiny": 0.0,
+   "destiny_ci": [
+    0.0,
+    0.0566
+   ],
+   "required_buffer": 1607.3493,
+   "expected_future_loss": 900.0388,
+   "futures_ruined_by_surplus": 19,
+   "futures_ruined_by_sla": 45,
+   "destiny_blind": 0.0,
+   "destiny_blind_ci": [
+    0.0,
+    0.0566
+   ],
+   "destiny_observer": 0.0,
+   "destiny_observer_ci": [
+    0.0,
+    0.0566
+   ],
+   "regime_posterior": [
+    0.0,
+    0.0071,
+    0.2172,
+    0.7756
+   ]
+  },
+  {
+   "time": 336,
+   "surplus": 35.8047,
+   "d_state": "CHAOTIC",
+   "regime": "DISRUPTED",
+   "chaos_pressure": 0.9215,
+   "destiny": 0.0,
+   "destiny_ci": [
+    0.0,
+    0.0566
+   ],
+   "required_buffer": 1419.9281,
+   "expected_future_loss": 875.8496,
+   "futures_ruined_by_surplus": 0,
+   "futures_ruined_by_sla": 64,
+   "destiny_blind": 0.0,
+   "destiny_blind_ci": [
+    0.0,
+    0.0566
+   ],
+   "destiny_observer": 0.0,
+   "destiny_observer_ci": [
+    0.0,
+    0.0566
+   ],
+   "regime_posterior": [
+    0.003,
+    0.0876,
+    0.7198,
+    0.1897
+   ]
+  }
+ ],
+ "end": {
+  "time": 339,
+  "destiny": 0.0
+ }
+}

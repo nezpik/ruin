@@ -1,0 +1,798 @@
+{
+ "reference": {
+  "shifts": 80,
+  "avoidance": 0.0,
+  "ruin_probability": 0.087,
+  "mean_loss": 151.6,
+  "jams": {
+   "born_per_100_steps": {
+    "mean": 30.961,
+    "se": 0.429,
+    "n": 80
+   },
+   "median_lifetime": {
+    "mean": 9.031,
+    "se": 0.116,
+    "n": 80
+   },
+   "largest_area_cells": {
+    "mean": 229.75,
+    "se": 15.964,
+    "n": 80
+   },
+   "share_of_grid_in_largest_jam": {
+    "mean": 0.255,
+    "se": 0.018,
+    "n": 80
+   }
+  },
+  "pile_up": {
+   "mean": 2.211,
+   "se": 0.011,
+   "n": 80
+  },
+  "diversion": {
+   "mean": 0.906,
+   "se": 0.003,
+   "n": 80
+  },
+  "corridors": {
+   "per_shift": {
+    "mean": 0.0,
+    "se": 0.0,
+    "n": 80
+   },
+   "cells_per_shift": {
+    "mean": 0.0,
+    "se": 0.0,
+    "n": 80
+   }
+  },
+  "pressure": {
+   "top_decile_share": {
+    "mean": 0.163,
+    "se": 0.001,
+    "n": 80
+   },
+   "hotspots_persist_between_halves": {
+    "mean": 0.118,
+    "se": 0.017,
+    "n": 80
+   }
+  },
+  "recovery": {
+   "median_steps_peak_to_clear": {
+    "mean": 7.825,
+    "se": 0.129,
+    "n": 80
+   },
+   "flow_into_recovering_cells": {
+    "mean": 1.445,
+    "se": 0.007,
+    "n": 80
+   }
+  },
+  "loss": {
+   "share_inside_jams": {
+    "mean": 0.528,
+    "se": 0.019,
+    "n": 80
+   },
+   "enrichment_inside_jams": {
+    "mean": 4.99,
+    "se": 0.201,
+    "n": 80
+   },
+   "share_of_cells_carrying_half_the_loss": {
+    "mean": 0.022,
+    "se": 0.003,
+    "n": 80
+   }
+  },
+  "ruin_zone": {
+   "ruined_shifts": 7,
+   "loss_share_outside_any_jam": {
+    "mean": 0.182,
+    "se": 0.041,
+    "n": 7
+   },
+   "top_jam_share_of_loss": {
+    "mean": 0.569,
+    "se": 0.068,
+    "n": 7
+   },
+   "top_jam_peak_area_cells": {
+    "mean": 485.857,
+    "se": 40.173,
+    "n": 7
+   },
+   "top_jam_born_in_disrupted_or_chaotic": 0.857
+  },
+  "attribution": {
+   "delay_share_by_origin": {
+    "STABLE": 0.5306,
+    "STRESSED": 0.2451,
+    "DISRUPTED": 0.1476,
+    "CHAOTIC": 0.0762,
+    "FEEDBACK": 0.0005
+   },
+   "loss_share_by_regime_when_accrued": {
+    "STABLE": 0.3356,
+    "STRESSED": 0.1709,
+    "DISRUPTED": 0.3534,
+    "CHAOTIC": 0.1401
+   }
+  }
+ },
+ "thin_matched": {
+  "shifts": 80,
+  "avoidance": 0.0,
+  "ruin_probability": 0.0,
+  "mean_loss": 87.5,
+  "jams": {
+   "born_per_100_steps": {
+    "mean": 33.877,
+    "se": 0.244,
+    "n": 80
+   },
+   "median_lifetime": {
+    "mean": 9.756,
+    "se": 0.101,
+    "n": 80
+   },
+   "largest_area_cells": {
+    "mean": 161.35,
+    "se": 4.387,
+    "n": 80
+   },
+   "share_of_grid_in_largest_jam": {
+    "mean": 0.179,
+    "se": 0.005,
+    "n": 80
+   }
+  },
+  "pile_up": {
+   "mean": 2.141,
+   "se": 0.009,
+   "n": 80
+  },
+  "diversion": {
+   "mean": 0.919,
+   "se": 0.002,
+   "n": 80
+  },
+  "corridors": {
+   "per_shift": {
+    "mean": 0.025,
+    "se": 0.018,
+    "n": 80
+   },
+   "cells_per_shift": {
+    "mean": 0.087,
+    "se": 0.062,
+    "n": 80
+   }
+  },
+  "pressure": {
+   "top_decile_share": {
+    "mean": 0.158,
+    "se": 0.001,
+    "n": 80
+   },
+   "hotspots_persist_between_halves": {
+    "mean": 0.107,
+    "se": 0.019,
+    "n": 80
+   }
+  },
+  "recovery": {
+   "median_steps_peak_to_clear": {
+    "mean": 8.512,
+    "se": 0.094,
+    "n": 80
+   },
+   "flow_into_recovering_cells": {
+    "mean": 1.448,
+    "se": 0.006,
+    "n": 80
+   }
+  },
+  "loss": {
+   "share_inside_jams": {
+    "mean": 0.481,
+    "se": 0.015,
+    "n": 80
+   },
+   "enrichment_inside_jams": {
+    "mean": 4.032,
+    "se": 0.125,
+    "n": 80
+   },
+   "share_of_cells_carrying_half_the_loss": {
+    "mean": 0.02,
+    "se": 0.001,
+    "n": 80
+   }
+  },
+  "attribution": {
+   "delay_share_by_origin": {
+    "EXOGENOUS": 0.9997,
+    "FEEDBACK": 0.0003
+   }
+  }
+ },
+ "avoidance": {
+  "0.0": {
+   "organization": {
+    "shifts": 40,
+    "avoidance": 0.0,
+    "ruin_probability": 0.05,
+    "mean_loss": 146.4,
+    "jams": {
+     "born_per_100_steps": {
+      "mean": 31.062,
+      "se": 0.62,
+      "n": 40
+     },
+     "median_lifetime": {
+      "mean": 9.062,
+      "se": 0.138,
+      "n": 40
+     },
+     "largest_area_cells": {
+      "mean": 222.175,
+      "se": 23.484,
+      "n": 40
+     },
+     "share_of_grid_in_largest_jam": {
+      "mean": 0.247,
+      "se": 0.026,
+      "n": 40
+     }
+    },
+    "pile_up": {
+     "mean": 2.221,
+     "se": 0.017,
+     "n": 40
+    },
+    "diversion": {
+     "mean": 0.908,
+     "se": 0.004,
+     "n": 40
+    },
+    "corridors": {
+     "per_shift": {
+      "mean": 0.0,
+      "se": 0.0,
+      "n": 40
+     },
+     "cells_per_shift": {
+      "mean": 0.0,
+      "se": 0.0,
+      "n": 40
+     }
+    },
+    "pressure": {
+     "top_decile_share": {
+      "mean": 0.162,
+      "se": 0.002,
+      "n": 40
+     },
+     "hotspots_persist_between_halves": {
+      "mean": 0.081,
+      "se": 0.022,
+      "n": 40
+     }
+    },
+    "recovery": {
+     "median_steps_peak_to_clear": {
+      "mean": 7.862,
+      "se": 0.165,
+      "n": 40
+     },
+     "flow_into_recovering_cells": {
+      "mean": 1.445,
+      "se": 0.01,
+      "n": 40
+     }
+    },
+    "loss": {
+     "share_inside_jams": {
+      "mean": 0.54,
+      "se": 0.025,
+      "n": 40
+     },
+     "enrichment_inside_jams": {
+      "mean": 5.219,
+      "se": 0.279,
+      "n": 40
+     },
+     "share_of_cells_carrying_half_the_loss": {
+      "mean": 0.021,
+      "se": 0.004,
+      "n": 40
+     }
+    },
+    "ruin_zone": {
+     "ruined_shifts": 2,
+     "loss_share_outside_any_jam": {
+      "mean": 0.065,
+      "se": 0.002,
+      "n": 2
+     },
+     "top_jam_share_of_loss": {
+      "mean": 0.706,
+      "se": 0.21,
+      "n": 2
+     },
+     "top_jam_peak_area_cells": {
+      "mean": 520.5,
+      "se": 150.5,
+      "n": 2
+     },
+     "top_jam_born_in_disrupted_or_chaotic": 1.0
+    },
+    "attribution": {
+     "delay_share_by_origin": {
+      "STABLE": 0.532,
+      "STRESSED": 0.2635,
+      "DISRUPTED": 0.1461,
+      "CHAOTIC": 0.058,
+      "FEEDBACK": 0.0005
+     },
+     "loss_share_by_regime_when_accrued": {
+      "STABLE": 0.3498,
+      "STRESSED": 0.1533,
+      "DISRUPTED": 0.3939,
+      "CHAOTIC": 0.1029
+     }
+    }
+   },
+   "risk": {
+    "ruin_probability": 0.155,
+    "ruin_probability_ci": [
+     0.1228,
+     0.1937
+    ],
+    "ruin_by_surplus": 51,
+    "ruin_by_sla": 11,
+    "mean_loss": 182.5742,
+    "mean_loss_ci": [
+     156.9155,
+     212.7805
+    ],
+    "expected_shortfall": 1267.3722,
+    "mean_on_time_rate": 0.9919
+   }
+  },
+  "1.0": {
+   "organization": {
+    "shifts": 40,
+    "avoidance": 1.0,
+    "ruin_probability": 0.175,
+    "mean_loss": 138.4,
+    "jams": {
+     "born_per_100_steps": {
+      "mean": 30.037,
+      "se": 0.516,
+      "n": 40
+     },
+     "median_lifetime": {
+      "mean": 9.213,
+      "se": 0.142,
+      "n": 40
+     },
+     "largest_area_cells": {
+      "mean": 223.2,
+      "se": 24.555,
+      "n": 40
+     },
+     "share_of_grid_in_largest_jam": {
+      "mean": 0.248,
+      "se": 0.027,
+      "n": 40
+     }
+    },
+    "pile_up": {
+     "mean": 2.098,
+     "se": 0.018,
+     "n": 40
+    },
+    "diversion": {
+     "mean": 0.929,
+     "se": 0.005,
+     "n": 40
+    },
+    "corridors": {
+     "per_shift": {
+      "mean": 0.125,
+      "se": 0.053,
+      "n": 40
+     },
+     "cells_per_shift": {
+      "mean": 0.475,
+      "se": 0.206,
+      "n": 40
+     }
+    },
+    "pressure": {
+     "top_decile_share": {
+      "mean": 0.166,
+      "se": 0.002,
+      "n": 40
+     },
+     "hotspots_persist_between_halves": {
+      "mean": 0.145,
+      "se": 0.03,
+      "n": 40
+     }
+    },
+    "recovery": {
+     "median_steps_peak_to_clear": {
+      "mean": 7.975,
+      "se": 0.159,
+      "n": 40
+     },
+     "flow_into_recovering_cells": {
+      "mean": 1.406,
+      "se": 0.008,
+      "n": 40
+     }
+    },
+    "loss": {
+     "share_inside_jams": {
+      "mean": 0.539,
+      "se": 0.029,
+      "n": 40
+     },
+     "enrichment_inside_jams": {
+      "mean": 5.491,
+      "se": 0.361,
+      "n": 40
+     },
+     "share_of_cells_carrying_half_the_loss": {
+      "mean": 0.019,
+      "se": 0.003,
+      "n": 40
+     }
+    },
+    "ruin_zone": {
+     "ruined_shifts": 7,
+     "loss_share_outside_any_jam": {
+      "mean": 0.313,
+      "se": 0.027,
+      "n": 7
+     },
+     "top_jam_share_of_loss": {
+      "mean": 0.521,
+      "se": 0.053,
+      "n": 7
+     },
+     "top_jam_peak_area_cells": {
+      "mean": 351.714,
+      "se": 58.279,
+      "n": 7
+     },
+     "top_jam_born_in_disrupted_or_chaotic": 0.857
+    },
+    "attribution": {
+     "delay_share_by_origin": {
+      "STABLE": 0.5668,
+      "STRESSED": 0.2231,
+      "DISRUPTED": 0.1514,
+      "CHAOTIC": 0.0583,
+      "FEEDBACK": 0.0005
+     },
+     "loss_share_by_regime_when_accrued": {
+      "STABLE": 0.3875,
+      "STRESSED": 0.2868,
+      "DISRUPTED": 0.25,
+      "CHAOTIC": 0.0757
+     }
+    }
+   },
+   "risk": {
+    "ruin_probability": 0.1425,
+    "ruin_probability_ci": [
+     0.1116,
+     0.1802
+    ],
+    "ruin_by_surplus": 44,
+    "ruin_by_sla": 13,
+    "mean_loss": 155.3972,
+    "mean_loss_ci": [
+     135.9171,
+     180.1173
+    ],
+    "expected_shortfall": 981.0593,
+    "mean_on_time_rate": 0.9929
+   }
+  },
+  "3.0": {
+   "organization": {
+    "shifts": 40,
+    "avoidance": 3.0,
+    "ruin_probability": 0.1,
+    "mean_loss": 110.1,
+    "jams": {
+     "born_per_100_steps": {
+      "mean": 29.631,
+      "se": 0.7,
+      "n": 40
+     },
+     "median_lifetime": {
+      "mean": 9.425,
+      "se": 0.178,
+      "n": 40
+     },
+     "largest_area_cells": {
+      "mean": 239.8,
+      "se": 27.038,
+      "n": 40
+     },
+     "share_of_grid_in_largest_jam": {
+      "mean": 0.266,
+      "se": 0.03,
+      "n": 40
+     }
+    },
+    "pile_up": {
+     "mean": 1.812,
+     "se": 0.015,
+     "n": 40
+    },
+    "diversion": {
+     "mean": 0.947,
+     "se": 0.005,
+     "n": 40
+    },
+    "corridors": {
+     "per_shift": {
+      "mean": 0.025,
+      "se": 0.025,
+      "n": 40
+     },
+     "cells_per_shift": {
+      "mean": 0.075,
+      "se": 0.075,
+      "n": 40
+     }
+    },
+    "pressure": {
+     "top_decile_share": {
+      "mean": 0.165,
+      "se": 0.003,
+      "n": 40
+     },
+     "hotspots_persist_between_halves": {
+      "mean": 0.146,
+      "se": 0.029,
+      "n": 40
+     }
+    },
+    "recovery": {
+     "median_steps_peak_to_clear": {
+      "mean": 8.05,
+      "se": 0.218,
+      "n": 40
+     },
+     "flow_into_recovering_cells": {
+      "mean": 1.305,
+      "se": 0.009,
+      "n": 40
+     }
+    },
+    "loss": {
+     "share_inside_jams": {
+      "mean": 0.479,
+      "se": 0.034,
+      "n": 40
+     },
+     "enrichment_inside_jams": {
+      "mean": 4.699,
+      "se": 0.381,
+      "n": 40
+     },
+     "share_of_cells_carrying_half_the_loss": {
+      "mean": 0.019,
+      "se": 0.003,
+      "n": 40
+     }
+    },
+    "ruin_zone": {
+     "ruined_shifts": 4,
+     "loss_share_outside_any_jam": {
+      "mean": 0.278,
+      "se": 0.071,
+      "n": 4
+     },
+     "top_jam_share_of_loss": {
+      "mean": 0.551,
+      "se": 0.082,
+      "n": 4
+     },
+     "top_jam_peak_area_cells": {
+      "mean": 535.5,
+      "se": 54.413,
+      "n": 4
+     },
+     "top_jam_born_in_disrupted_or_chaotic": 1.0
+    },
+    "attribution": {
+     "delay_share_by_origin": {
+      "STABLE": 0.5459,
+      "STRESSED": 0.2463,
+      "DISRUPTED": 0.127,
+      "CHAOTIC": 0.0804,
+      "FEEDBACK": 0.0004
+     },
+     "loss_share_by_regime_when_accrued": {
+      "STABLE": 0.3878,
+      "STRESSED": 0.1996,
+      "DISRUPTED": 0.3186,
+      "CHAOTIC": 0.094
+     }
+    }
+   },
+   "risk": {
+    "ruin_probability": 0.1275,
+    "ruin_probability_ci": [
+     0.0983,
+     0.1638
+    ],
+    "ruin_by_surplus": 37,
+    "ruin_by_sla": 14,
+    "mean_loss": 131.4607,
+    "mean_loss_ci": [
+     112.1964,
+     150.0099
+    ],
+    "expected_shortfall": 802.5441,
+    "mean_on_time_rate": 0.9939
+   }
+  },
+  "8.0": {
+   "organization": {
+    "shifts": 40,
+    "avoidance": 8.0,
+    "ruin_probability": 0.075,
+    "mean_loss": 103.5,
+    "jams": {
+     "born_per_100_steps": {
+      "mean": 31.261,
+      "se": 0.583,
+      "n": 40
+     },
+     "median_lifetime": {
+      "mean": 8.762,
+      "se": 0.142,
+      "n": 40
+     },
+     "largest_area_cells": {
+      "mean": 269.55,
+      "se": 26.894,
+      "n": 40
+     },
+     "share_of_grid_in_largest_jam": {
+      "mean": 0.299,
+      "se": 0.03,
+      "n": 40
+     }
+    },
+    "pile_up": {
+     "mean": 1.521,
+     "se": 0.016,
+     "n": 40
+    },
+    "diversion": {
+     "mean": 0.903,
+     "se": 0.004,
+     "n": 40
+    },
+    "corridors": {
+     "per_shift": {
+      "mean": 0.125,
+      "se": 0.053,
+      "n": 40
+     },
+     "cells_per_shift": {
+      "mean": 0.4,
+      "se": 0.171,
+      "n": 40
+     }
+    },
+    "pressure": {
+     "top_decile_share": {
+      "mean": 0.159,
+      "se": 0.002,
+      "n": 40
+     },
+     "hotspots_persist_between_halves": {
+      "mean": 0.115,
+      "se": 0.027,
+      "n": 40
+     }
+    },
+    "recovery": {
+     "median_steps_peak_to_clear": {
+      "mean": 7.6,
+      "se": 0.183,
+      "n": 40
+     },
+     "flow_into_recovering_cells": {
+      "mean": 1.082,
+      "se": 0.008,
+      "n": 40
+     }
+    },
+    "loss": {
+     "share_inside_jams": {
+      "mean": 0.505,
+      "se": 0.03,
+      "n": 39
+     },
+     "enrichment_inside_jams": {
+      "mean": 4.642,
+      "se": 0.365,
+      "n": 39
+     },
+     "share_of_cells_carrying_half_the_loss": {
+      "mean": 0.017,
+      "se": 0.003,
+      "n": 39
+     }
+    },
+    "ruin_zone": {
+     "ruined_shifts": 3,
+     "loss_share_outside_any_jam": {
+      "mean": 0.223,
+      "se": 0.059,
+      "n": 3
+     },
+     "top_jam_share_of_loss": {
+      "mean": 0.563,
+      "se": 0.16,
+      "n": 3
+     },
+     "top_jam_peak_area_cells": {
+      "mean": 513.0,
+      "se": 68.574,
+      "n": 3
+     },
+     "top_jam_born_in_disrupted_or_chaotic": 0.667
+    },
+    "attribution": {
+     "delay_share_by_origin": {
+      "STABLE": 0.4709,
+      "STRESSED": 0.2488,
+      "DISRUPTED": 0.195,
+      "CHAOTIC": 0.085,
+      "FEEDBACK": 0.0004
+     },
+     "loss_share_by_regime_when_accrued": {
+      "STABLE": 0.3091,
+      "STRESSED": 0.2451,
+      "DISRUPTED": 0.29,
+      "CHAOTIC": 0.1558
+     }
+    }
+   },
+   "risk": {
+    "ruin_probability": 0.095,
+    "ruin_probability_ci": [
+     0.07,
+     0.1277
+    ],
+    "ruin_by_surplus": 32,
+    "ruin_by_sla": 6,
+    "mean_loss": 104.4423,
+    "mean_loss_ci": [
+     86.8148,
+     124.1264
+    ],
+    "expected_shortfall": 836.3274,
+    "mean_on_time_rate": 0.9953
+   }
+  }
+ }
+}
