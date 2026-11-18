@@ -4,7 +4,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.11--3.14-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![v0.6.0](https://img.shields.io/badge/Version-v0.6.0-green.svg)](https://github.com/nezpik/ruin)
+[![v0.7.0](https://img.shields.io/badge/Version-v0.7.0-green.svg)](https://github.com/nezpik/ruin)
 
 RUIN is a research-grade framework for measuring when physical logistics systems run out of destiny. It translates quantitative finance concepts (ruin theory, jump-diffusion, Monte Carlo paths, VaR, Expected Shortfall, bootstrap confidence intervals) into a logistics language built around **physical uncertainty**, **service failure**, and **systemic collapse**.
 
@@ -32,13 +32,69 @@ In RUIN:
 - **Q dots travel and can succeed.** Each Q dot enters `D` with an origin, a destination, and a time window. Delivered on time, it earns surplus. Once late, it drains surplus every step until it is delivered late or abandoned.
 - **Demand keeps arriving.** New Q dots enter every step, so the shift is a flow, not a fixed population running down a clock.
 - **Travel is a jump-diffusion.** Progress per step is drift slowed by local field drag, plus Gaussian noise, minus occasional compound Poisson setbacks.
-- **Disruption is a field of events.** Shocks land on the grid, spread to neighbouring cells, and fade. The field is subcritical by construction: a shock can never amplify itself. By default it reflects at the edges: disruption, like Q dots, cannot leave `D`.
-- **Q and D co-evolve.** The field slows Q dots; late and failed Q dots add disruption where they stand.
-- **Ruin is uncertain.** With no disruption the reference shift never ruins. With the calibrated disruption level about one shift in eight does, at very different times, some by exhausting the surplus and some by breaching the SLA.
+- **D has a hidden regime.** D is stable, stressed, disrupted, or chaotic, and the regime is what generates disruption: in persistent bursts, with heavy-tailed sizes. You see its footprint in the pressures, never the regime itself. See [A Regime-Driven D](#a-regime-driven-d).
+- **Disruption is a field of events.** Shocks land on the grid, spread to neighbouring cells, and fade. The field is subcritical by construction: a shock can never amplify itself, even where jams make it linger. By default it reflects at the edges: disruption, like Q dots, cannot leave `D`.
+- **Q and D co-evolve.** The field slows Q dots; late and failed Q dots add disruption where they stand and push the regime toward worse levels; healthy flow resists escalation.
+- **Ruin is uncertain.** With no disruption the reference shift never ruins. In the reference scenario about one shift in six does, at very different times, most by exhausting the surplus and some by breaching the SLA.
 
 Everything is seeded and reproducible, Monte Carlo runs in parallel, and a 480-step path takes about 0.2 s.
 
 See [CHANGELOG.md](CHANGELOG.md) for what changed in each version and how to migrate a config.
+
+---
+
+## A Regime-Driven D
+
+Most simulators draw disruption as a constant drizzle of independent small shocks. Averaged over a shift that is almost deterministic, and it is not how logistics behaves: disruption arrives in bursts, a bad stretch is followed by another, and the system's own state changes how likely the next burst is. RUIN models `D` accordingly.
+
+`D` is in a **regime**: stable, stressed, disrupted, or chaotic. The regime moves one level at a time and stays where it is for a while. Each level changes how often shocks arrive, how big they are, and how noisy travel is. The regime is **hidden**: what you observe is its footprint in the pressures (the D-state label), which is why the two disagree about a quarter of the time. In the reference scenario the D-state label matches the hidden regime exactly 73% of the time and is within one level 97% of the time.
+
+The regime and the pressures **co-evolve**. Late deliveries raise chaos pressure, chaos pressure pulls the regime toward worse levels, a worse regime brings more and larger shocks, and healthy flow resists escalation and speeds recovery. Where Q dots are stalled, disruption also lingers, so jams persist, but retention is capped below 1 and the field still cannot amplify itself.
+
+All of this is opt-in (`probability_square.regime.enabled`). With it off, disruption is memoryless and the model is exactly what it was in v0.6; `examples/urban_ruin_shift_thin.yaml` is that version of the scenario.
+
+### Does it behave like logistics?
+
+There is no data to calibrate against yet, so RUIN checks the model against qualitative regularities that logistics operations are widely reported to show. These are properties a model should have, not proof that it is right; I have not checked sources for them here.
+
+```bash
+uv run ruin facts --config examples/urban_ruin_shift.yaml
+```
+
+| Fact | Scenario | Memoryless version | Needed |
+| --- | --- | --- | --- |
+| Disruption clusters (Fano factor of events per 24 steps) | 3.41 | 1.0 | ≥ 1.5 (Poisson is 1) |
+| Bad stretches persist (correlation of adjacent 12-step windows) | 0.48 | 0.01 | ≥ 0.15 |
+| Shift loss is heavy-tailed (95th over 50th percentile) | 8.54 | 1.91 | ≥ 3 and ≥ 1.5× memoryless |
+| Trip times are heavy-tailed (99th over 50th percentile) | 2.6 | 2.44 | ≥ 2 |
+| Good days and bad days (variation of delayed-trip share across shifts) | 0.57 | 0.19 | ≥ 2× memoryless |
+| Flaw of averages (mean loss over memoryless at equal mean disruption) | 1.82× | 1× | ≥ 1.1× |
+| D-state follows the hidden regime without revealing it (correlation / exact match) | 0.65 / 0.73 | n/a | ≥ 0.5, exact < 0.9 |
+| Pressure pushes the regime (escalation ratio when pressure points higher) | 1.55× | n/a | ≥ 1.3× |
+
+The memoryless version of the same scenario passes one of the six facts that apply to it (trip tails, which it has by nature) and fails the other five, so the suite can fail.
+
+### How much does the answer depend on the shape of disruption?
+
+```bash
+uv run ruin structure --config examples/urban_ruin_shift.yaml
+```
+
+runs the scenario under four structures that deliver the **same realised mean disruption** (148 units of shock mass per step, measured over whole shifts):
+
+| Structure (same realised mean disruption) | Ruin probability | 95% interval | Mean loss | Expected shortfall |
+| --- | --- | --- | --- | --- |
+| Memoryless, exponential sizes | 0.0% | 0.0% to 0.9% | 84 | 194 |
+| Memoryless, heavy-tailed sizes | 0.0% | 0.0% to 0.9% | 85 | 221 |
+| Hidden regime, exponential sizes | 11.8% | 8.9% to 15.3% | 147 | 943 |
+| Hidden regime, heavy tails, lingering jams (the scenario) | 15.5% | 12.3% to 19.4% | 183 | 1267 |
+
+Two things stand out:
+
+- **At the same average disruption, the memoryless world never ruins.** Ruin in this scenario is a property of crises, not of the average level of disruption. If real disruption were not clustered, this operation would be safe.
+- **Heavy tails alone changed almost nothing for ruin** (a mild rise in the tail loss). A shock is already large enough to block a cell for a long time, so making the biggest ones bigger adds little; burstiness is what matters here.
+
+A ruin probability should therefore be read as a statement about a structure, not as a number. The structural spread across these four, 0% to 16%, is larger than the Monte Carlo interval around any one of them.
 
 ---
 
@@ -76,30 +132,31 @@ This produces:
 uv run ruin risk --config examples/urban_ruin_shift.yaml --jobs 4
 ```
 
-Example output for the 1,000 paths the config asks for (`time_to_ruin` list omitted):
+Output for the 1,000 paths the config asks for (`time_to_ruin` list omitted):
 
 ```json
 {
   "paths": 1000,
-  "ruin_probability": 0.125,
-  "ruin_probability_ci": [0.1059, 0.1469],
-  "ruin_by_surplus": 73,
-  "ruin_by_sla": 52,
-  "mean_loss": 239.2149,
-  "mean_loss_ci": [233.6229, 244.9512],
-  "loss_std": 93.4473,
-  "value_at_risk": 409.6681,
-  "value_at_risk_ci": [393.0313, 432.9468],
-  "expected_shortfall": 486.4877,
-  "expected_shortfall_ci": [460.7321, 511.6302],
-  "loss_share_by_type": {"STANDARD": 0.1736, "EXPRESS": 0.8009, "BULKY": 0.0255},
-  "expected_shortfall_by_type": {"STANDARD": 90.864, "EXPRESS": 376.2256, "BULKY": 19.3981},
-  "share_of_qdots_with_loss": 0.011846,
-  "loss_share_of_top_1pct_qdots": 0.9676,
-  "mean_final_surplus": 144.6213,
-  "mean_min_surplus": 81.543,
-  "mean_on_time_rate": 0.9877,
-  "mean_time_to_ruin": 284.51,
+  "ruin_probability": 0.16,
+  "ruin_probability_ci": [0.1386, 0.184],
+  "ruin_by_surplus": 131,
+  "ruin_by_sla": 29,
+  "mean_loss": 188.469,
+  "mean_loss_ci": [169.8396, 207.7931],
+  "loss_std": 307.7357,
+  "value_at_risk": 837.0866,
+  "value_at_risk_ci": [651.9906, 943.6986],
+  "expected_shortfall": 1260.2749,
+  "expected_shortfall_ci": [1089.8598, 1430.3121],
+  "loss_share_by_type": {"STANDARD": 0.2204, "EXPRESS": 0.7469, "BULKY": 0.0327},
+  "expected_shortfall_by_type": {"STANDARD": 359.2645, "EXPRESS": 834.5985, "BULKY": 66.4119},
+  "share_of_qdots_with_loss": 0.008035,
+  "loss_share_of_top_1pct_qdots": 0.9639,
+  "mean_regime_occupancy": {"STABLE": 0.7454, "STRESSED": 0.1645, "DISRUPTED": 0.0672, "CHAOTIC": 0.023},
+  "mean_final_surplus": 198.6578,
+  "mean_min_surplus": 30.5528,
+  "mean_on_time_rate": 0.9917,
+  "mean_time_to_ruin": 243.71,
   "confidence_level": 0.95,
   "n_jobs": 4
 }
@@ -110,8 +167,10 @@ How to read it:
 - Every `*_ci` is a confidence interval at `confidence_level`. The ruin probability uses a Wilson interval, which stays informative even when no path ruins. The loss figures use a bootstrap.
 - Each path runs to the end of the shift even after it ruins, so the loss figures describe whole shifts and are not cut off at the moment of ruin.
 - `ruin_by_surplus` / `ruin_by_sla` say which barrier was hit first. The SLA is breached when the share of deadlines missed over the last `sla_window` steps reaches `sla_threshold`.
+- The loss is heavy-tailed: the expected shortfall is about seven times the mean loss, which is what bad days look like.
+- `mean_regime_occupancy` is the share of time D spent in each hidden regime.
 - `expected_shortfall_by_type` splits the Expected Shortfall among Q-dot types; the parts add up to the total.
-- `share_of_qdots_with_loss` and `loss_share_of_top_1pct_qdots` say how concentrated the loss is. Here about 1% of Q dots carry essentially all of it.
+- `share_of_qdots_with_loss` and `loss_share_of_top_1pct_qdots` say how concentrated the loss is: under 1% of Q dots carry essentially all of it.
 
 The `--jobs` flag controls parallelism (defaults to available cores).
 
@@ -275,7 +334,7 @@ Full definitions and deeper philosophy are in `RUIN.md`.
 
 ---
 
-## Current Architecture (v0.6.0)
+## Current Architecture (v0.7.0)
 
 ```
 ruin/
@@ -285,12 +344,15 @@ ruin/
 │   └── processes.py         # Vectorized diffusion, jumps, shocks, batch travel
 ├── state_space/
 │   ├── probability_square.py   # Main engine: Q dots as arrays, one step of D
-│   └── disruption_field.py     # Subcritical spread-and-decay field
+│   ├── disruption_field.py     # Subcritical spread-and-decay field
+│   └── regime.py               # The hidden regime of D
 ├── simulation/
 │   └── agent_based.py
 ├── risk/
 │   ├── ruin_probability.py     # Parallel MC, Wilson and bootstrap intervals, VaR/ES
 │   ├── classical.py            # Cramér-Lundberg closed form and validation
+│   ├── structure.py            # Ruin risk under mean-matched disruption structures
+│   ├── stylized.py             # Stylized facts of logistics disruption
 │   ├── destiny.py              # Remaining destiny: branching futures from the present
 │   └── uncertainty.py          # Parameter sensitivity and uncertainty
 ├── viz/
@@ -368,7 +430,7 @@ If you use RUIN, its concepts, terminology, code, or experimental outputs in aca
 
 Suggested citation:
 
-> Zouiti, Naji. RUIN: Ruin-probability Unified In Networks. v0.6.0, 2026.  
+> Zouiti, Naji. RUIN: Ruin-probability Unified In Networks. v0.7.0, 2026.  
 > GitHub: https://github.com/nezpik/ruin
 
 BibTeX:
@@ -378,7 +440,7 @@ BibTeX:
   author = {Zouiti, Naji},
   title = {RUIN: Ruin-probability Unified In Networks},
   year = {2026},
-  version = {0.6.0},
+  version = {0.7.0},
   url = {https://github.com/nezpik/ruin}
 }
 ```
