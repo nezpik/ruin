@@ -218,6 +218,7 @@ def run_destiny(
     lowest = curve[destinies.index(min(destinies))] if curve else None
     return {
         "seed": base_seed,
+        "observer": None if observer is None else {"incidents": observer_incidents},
         "horizon": horizon,
         "branches": branches,
         "confidence_level": level,
@@ -272,6 +273,10 @@ def plot_destiny(result: dict[str, Any], output: str | Path) -> Path:
     regimes = [r for r in result.get("regime_path", []) if r is not None]
     has_blind = bool(curve) and "destiny_blind" in curve[0]
     has_observer = bool(curve) and "destiny_observer" in curve[0]
+    with_incidents = bool((result.get("observer") or {}).get("incidents"))
+    observer_label = (
+        "Observing pressures and incidents" if with_incidents else "Observing the pressures"
+    )
 
     rows = 3 if regimes else 2
     fig, axes = plt.subplots(
@@ -303,7 +308,7 @@ def plot_destiny(result: dict[str, Any], output: str | Path) -> Path:
         seen = [row["destiny_observer"] for row in curve] + [end]
         top.plot(
             times, seen, color=_ORANGE, linewidth=2, linestyle=(0, (1, 1.5)), marker="s",
-            markersize=4, label="Observing the pressures",
+            markersize=4, label=observer_label,
         )  # fmt: skip
     if has_blind:
         blind = [row["destiny_blind"] for row in curve] + [end]

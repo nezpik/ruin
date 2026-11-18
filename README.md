@@ -4,7 +4,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.11--3.14-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![v0.7.0](https://img.shields.io/badge/Version-v0.7.0-green.svg)](https://github.com/nezpik/ruin)
+[![v0.8.0](https://img.shields.io/badge/Version-v0.8.0-green.svg)](https://github.com/nezpik/ruin)
 
 RUIN is a research-grade framework for measuring when physical logistics systems run out of destiny. It translates quantitative finance concepts (ruin theory, jump-diffusion, Monte Carlo paths, VaR, Expected Shortfall, bootstrap confidence intervals) into a logistics language built around **physical uncertainty**, **service failure**, and **systemic collapse**.
 
@@ -176,6 +176,37 @@ The `--jobs` flag controls parallelism (defaults to available cores).
 
 ---
 
+## Seeing the Regime: the Observer
+
+Nobody sees the regime of `D`. An operator sees pressures, and perhaps an incident log; the D-state label is a crude reading of those. A hedging policy that triggers on the true regime would be clairvoyant and would overstate its own value, so RUIN includes an **observer**: a Bayes filter that turns what has been seen into a probability for each regime.
+
+```bash
+uv run ruin observer --config examples/urban_ruin_shift.yaml
+```
+
+fits the filter on simulated shifts and scores it against the true regime on 80 held-out shifts (38,000 steps):
+
+| Way of knowing the regime | Log score | Brier | Gap between forecast and outcome, mid-range | Precision of "disrupted or worse" at the label's recall |
+| --- | --- | --- | --- | --- |
+| Knowing nothing (the stationary mix) | −0.750 | 0.393 | 0.072 | n/a |
+| The D-state label | n/a | n/a | n/a | 0.48 |
+| Pressure filter | −0.541 | 0.299 | 0.043 | 0.71 |
+| Pressure filter with an incident feed | −0.474 | 0.262 | 0.024 | 0.79 |
+
+Higher log score and lower Brier are better; the filter's beliefs are close to calibrated, so "70%" comes true about 70% of the time. The filter is exact where it can be: the regime chain is known and its transitions depend only on pressures the observer sees. The likelihood of a pressure reading under each regime is a fitted Markov-switching model, and an incident feed (shocks per step) adds an exact Poisson likelihood.
+
+**The first version was worse than useless.** Treating each pressure reading as independent evidence (they are not: the disruption field remembers) made it overconfident, with a log score of −0.80 against −0.77 for ignoring the pressures entirely. Three lags, a likelihood temperature chosen on held-out shifts, and a per-regime bias correction fixed it. At a plain 50% cut-off the filter notices the start of a crisis later than the D-state label does (about 10 steps against 2.5), in exchange for far fewer false alarms.
+
+Two idealisations to keep in mind. The model is fitted with the true regime labels, which a real operator never has (they would fit it on unlabelled history, which should do somewhat worse). And an observer is fitted to one scenario and filters with that scenario's regime model.
+
+### What is an observer worth?
+
+`ruin destiny --observer` puts the observer's view next to the other two. Over 32 unselected shifts (6 of which ruined), in the checkpoints where the true regime was disrupted or chaotic, the observer closes **31%** (95% interval 14% to 43%) of the gap between knowing nothing about the regime and knowing it, and **36%** (21% to 47%) with an incident feed. So an operator reading the pressures recovers about a third of what a clairvoyant would know, which is what a policy triggered on observations can be expected to capture.
+
+Scored against what actually happened, every view beats a constant forecast (Brier 0.080 knowing the regime, 0.086 observing pressures and incidents, 0.090 observing pressures, 0.091 knowing nothing, against 0.109 for the constant). The difference between the observer and knowing nothing is not distinguishable from zero in this sample (−0.001, interval −0.011 to +0.008; −0.006, interval −0.014 to +0.002 with incidents). Six ruined shifts are too few to settle it.
+
+---
+
 ## Remaining Destiny
 
 `ruin risk` answers "how often does a shift like this ruin?". `ruin destiny` answers the question the project is named for: *how much destiny does this shift have left, right now?*
@@ -340,7 +371,7 @@ Full definitions and deeper philosophy are in `RUIN.md`.
 
 ---
 
-## Current Architecture (v0.7.0)
+## Current Architecture (v0.8.0)
 
 ```
 ruin/
@@ -440,7 +471,7 @@ If you use RUIN, its concepts, terminology, code, or experimental outputs in aca
 
 Suggested citation:
 
-> Zouiti, Naji. RUIN: Ruin-probability Unified In Networks. v0.7.0, 2026.  
+> Zouiti, Naji. RUIN: Ruin-probability Unified In Networks. v0.8.0, 2026.  
 > GitHub: https://github.com/nezpik/ruin
 
 BibTeX:
@@ -450,7 +481,7 @@ BibTeX:
   author = {Zouiti, Naji},
   title = {RUIN: Ruin-probability Unified In Networks},
   year = {2026},
-  version = {0.7.0},
+  version = {0.8.0},
   url = {https://github.com/nezpik/ruin}
 }
 ```
