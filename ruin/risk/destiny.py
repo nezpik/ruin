@@ -197,7 +197,8 @@ def run_destiny(
 _SURFACE, _INK, _INK_2, _MUTED, _GRID = "#1a1a19", "#f0efec", "#c3c2b7", "#898781", "#2c2c2a"
 _BLUE, _ORANGE, _AQUA, _CRITICAL = "#3987e5", "#d95926", "#199e70", "#d03b3b"
 _REGIME_NAMES = ("stable", "stressed", "disrupted", "chaotic")
-_REGIME_SHADE = (0.0, 0.22, 0.5, 0.85)  # neutral ramp: regime is context, not a series
+# Neutral gray ramp, brighter is worse: regime is context, not a series.
+_REGIME_GRAY = (0.18, 0.34, 0.56, 0.80)
 
 
 def plot_destiny(result: dict[str, Any], output: str | Path) -> Path:
@@ -206,7 +207,7 @@ def plot_destiny(result: dict[str, Any], output: str | Path) -> Path:
     Panels share the time axis rather than two scales sharing one panel:
     remaining destiny with its confidence band (and, when computed, the
     destiny of a blind observer who does not know the regime), a strip with
-    the hidden regime of the followed shift (darker is worse), then surplus
+    the hidden regime of the followed shift (brighter is worse), then surplus
     against the buffer the shift would need at each checkpoint.
     """
     import matplotlib
@@ -288,18 +289,17 @@ def plot_destiny(result: dict[str, Any], output: str | Path) -> Path:
 
     if regimes:
         strip = axes[1]
-        grid = [[_REGIME_NAMES.index(r.lower()) for r in regimes]]
-        shades = [_REGIME_SHADE[i] for i in grid[0]]
+        gray = [_REGIME_GRAY[_REGIME_NAMES.index(r.lower())] for r in regimes]
         strip.imshow(
-            [shades], aspect="auto", cmap="gray_r", vmin=0, vmax=1.15,
+            [gray], aspect="auto", cmap="gray", vmin=0, vmax=1,
             extent=(0, len(regimes), 0, 1), interpolation="nearest",
         )  # fmt: skip
         strip.set_yticks([])
         strip.set_ylabel("regime", color=_MUTED, fontsize=8, rotation=0, ha="right", va="center")
         strip.legend(
             handles=[
-                Patch(facecolor=str(1 - (0.12 + 0.88 * s)), edgecolor=_MUTED, label=n)
-                for s, n in zip(_REGIME_SHADE, _REGIME_NAMES, strict=True)
+                Patch(facecolor=str(g), edgecolor=_MUTED, label=n)
+                for g, n in zip(_REGIME_GRAY, _REGIME_NAMES, strict=True)
             ],
             loc="upper left", bbox_to_anchor=(0.0, -0.1), ncol=4, frameon=False, fontsize=8,
             labelcolor=_INK_2, handlelength=1.2, borderpad=0,

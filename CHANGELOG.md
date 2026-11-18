@@ -7,6 +7,139 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.0] - 2026-11
+
+**A regime-driven D**: disruption now has structure. D has a hidden regime that
+generates disruption in persistent, heavy-tailed bursts and responds to D's own
+pressures, and the model is checked against qualitative regularities of
+logistics instead of being tuned to a target number. Everything new is opt-in;
+with it off the model is exactly the 0.6.0 model, pinned by golden tests.
+
+### Why
+
+The 0.6.0 model drew disruption as a constant-rate Poisson stream of
+exponentially sized shocks. About 345 shocks per shift averaged out, so
+outcomes were nearly determined by the parameters: ruin went from 10% to 90%
+across a 1.32x change in shock rate, whole-shift loss varied little
+(coefficient of variation 0.38), and the D-state label was computed and
+reported but never read by the dynamics. That is the opposite of the vision:
+RUIN is not trying to make logistics look deterministic.
+
+### Added
+
+- **Hidden regime of D** (`probability_square.regime`, `ruin/state_space/regime.py`).
+  Four ordered levels (stable, stressed, disrupted, chaotic) moving one level
+  at a time. Each level scales the shock rate, shock size, and travel noise.
+  The chain is pulled toward the level chaos pressure points to
+  (`pressure_pull`), a move away from it is resisted, pressure inside a
+  regime's own band leaves it alone, and healthy flow resists escalation and
+  speeds recovery (`order_support`). The D-state label stays what the
+  pressures say; the regime is what D is doing. Snapshots and trajectories
+  carry `regime`, `regime_path`, `regime_occupancy`, `shock_count`, and
+  `shock_mass`; risk results carry `mean_regime_occupancy`.
+- **Heavy-tailed shocks** (`disruption_field.shock_size_sigma`): lognormal sizes
+  with the same mean.
+- **Load-dependent persistence** (`disruption_field.congestion_persistence`,
+  `max_gain`): where Q dots are stalled, disruption lingers. Retention is
+  capped at `max_gain` < 1, so the field still cannot amplify itself (tested as
+  an invariant). `field_retention` is reported per step.
+- **`ruin facts`** (`ruin/risk/stylized.py`): eight qualitative regularities
+  (clustering, persistence, heavy-tailed shifts, heavy-tailed trips, good days
+  and bad days, the flaw of averages, partial observability, co-evolution),
+  with a pass/fail and the memoryless value for comparison. Runs in CI.
+- **`ruin structure`** (`ruin/risk/structure.py`): ruin risk under four
+  structures (memoryless, heavy-tailed, clustered, full) matched on the
+  *realised* mean disruption, measured rather than derived because pressure
+  feedback changes how long the regime spends at each level.
+- **Blind destiny** (`ruin destiny --blind`): destiny for a viewer who knows
+  everything about D except the regime, next to destiny for one who knows it.
+  The destiny chart gains a regime strip and the blind curve.
+- `examples/urban_ruin_shift_thin.yaml`: the memoryless version of the scenario.
+- `ProbabilitySquare.forget_regime()`.
+
+### Changed
+
+- **The reference scenario is regime-driven** (`examples/urban_ruin_shift.yaml`).
+  Its numbers describe a plausible stylised operation, not a calibrated one, and
+  the file says so. Over 1,000 paths: ruin probability 0.16 (95% interval 0.139
+  to 0.184), 131 by surplus and 29 by SLA, mean loss 188, expected shortfall
+  1,260, on-time delivery 99.2%, and D in the stable regime 75% of the time.
+  The D-state label matches the hidden regime exactly 73% of the time and within
+  one level 97%. D-state thresholds are now 0.25 / 0.37 / 0.53, set from where
+  the regimes put chaos pressure.
+- **Ruin probabilities are not comparable with 0.6.0.** That model's scenario
+  is `examples/urban_ruin_shift_thin.yaml`.
+
+### Removed
+
+- `probability_square.order_pressure_weight` and `chaos_pressure_weight`: they
+  were validated and never used. Configs that set them now fail validation;
+  delete the two lines.
+
+### What the analysis showed
+
+- **At the same realised mean disruption (148 shock mass per step), the
+  memoryless world never ruins.** Ruin probability by structure: memoryless 0%
+  (95% interval 0 to 0.95%), memoryless with heavy-tailed sizes 0%, clustered
+  by regime 11.7% (9.0% to 15.3%), full scenario 15.5% (12.3% to 19.4%). Ruin
+  in this scenario is a property of crises, not of the average level of
+  disruption.
+- **Heavy tails alone changed almost nothing for ruin**, only the tail loss
+  (95% VaR 156 to 172, Expected Shortfall 194 to 221). A shock is already large
+  enough to block a cell for a long time, so making the biggest ones bigger adds
+  little. Burstiness is what matters here.
+- **The flaw of averages is real in the model:** at equal mean disruption the
+  scenario's mean whole-shift loss is 1.8 times the memoryless version's.
+- **Good days and bad days:** the variation of the delayed-trip share across
+  shifts is 0.57 against 0.19 for the memoryless version; the 95th-percentile
+  shift costs 8.5 times the median one against 1.9.
+- **This corrects two conclusions from 0.6.0**, which were products of the
+  memoryless model's cliff:
+  - Sensitivities are three to four times smaller: time windows -7.9 (was -31.6),
+    shock rate +6.0 (+13.0), shock size +5.7 (+15.3), travel speed -4.3 (-18.0).
+    The ranking of the four levers is no longer the same (shock rate and size
+    now rank above travel speed), and the economics and the buffer are inside
+    Monte Carlo noise.
+  - Parameter uncertainty no longer doubles the ruin probability. With the same
+    parameter spreads, the predictive ruin probability is 19% against 16% with
+    parameters taken as exact (it was 28% against 12%); the 5% to 95% range is
+    1% to 41%, and no draw ruined more than half the time (27% did before).
+- **Parameter and structural uncertainty are comparable in size.** Parameters
+  spread ruin from about 1% to 41%; structure moves it from 0% to 16%. Both
+  are far larger than the few points of sampling error around one estimate.
+- **Regimes are only partly observable, and that matters.** In the example
+  shift (seed 81) surplus was at its highest when the crisis began, and the
+  buffer needed for a 95% chance of safety rose from about 250 to over 1,100.
+  Destiny knowing the regime fell to 56% at step 264 and 30% at step 288;
+  without knowing it, it read 89% and 83%.
+
+### Process notes
+
+- Two measures I first wrote were wrong and are fixed: a hysteresis band
+  (relaxation boosted only below a band) turned out to change the share of
+  steps the regime lingers by 0.5 percentage points (9.2% to 9.7%), so it was
+  replaced by the simpler symmetric pull; and the pressure-to-regime
+  escalation ratio read pressure one step too early, understating it.
+- The facts suite has a negative control: the memoryless scenario passes
+  one of the six facts that apply to it and fails the other five.
+
+### Known limits
+
+- The regime parameters are illustrative, not estimated from data, and the
+  stylized facts are qualitative regularities I believe are widely reported, not
+  checked against sources here. A ruin probability is a statement about a
+  structure.
+- `ruin structure` matches only the first moment of disruption mass.
+- `--blind` is the "knows nothing about the regime" bound; an observer who sees
+  the pressures sits between the two curves. A posterior over the regime would
+  give that observer.
+- Congestion affects pressure and how long disruption lingers, but does not
+  slow travel.
+- Loss is still concentrated in a small share of Q dots (about 1% of Q dots
+  carry 96% of the loss) because deadlines do not depend on trip length.
+
+---
+
 ## [0.6.0] - 2026-11
 
 **Making destiny measurable**: the remaining destiny of a shift as a curve, a

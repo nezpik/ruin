@@ -181,18 +181,20 @@ The `--jobs` flag controls parallelism (defaults to available cores).
 `ruin risk` answers "how often does a shift like this ruin?". `ruin destiny` answers the question the project is named for: *how much destiny does this shift have left, right now?*
 
 ```bash
-uv run ruin destiny --config examples/urban_ruin_shift.yaml --seed 56 --plot destiny.png
+uv run ruin destiny --config examples/urban_ruin_shift.yaml --seed 81 --blind --plot destiny.png
 ```
 
-It follows one shift. Every 24 steps it freezes the exact present (every Q dot, every cell of the disruption field, the surplus, the SLA window) and plays 64 independent futures forward from it. The share that reach the end of the shift without ruin is the shift's **remaining destiny** at that moment:
+It follows one shift. Every 24 steps it freezes the exact present (every Q dot, every cell of the disruption field, the surplus, the SLA window, the hidden regime) and plays 64 independent futures forward from it. The share that reach the end of the shift without ruin is the shift's **remaining destiny** at that moment:
 
 ```text
 destiny(t) = P(no ruin before the horizon | everything known at t)
 ```
 
-![Remaining destiny of one shift](docs/destiny_seed56.png)
+![Remaining destiny of one shift, with the hidden regime](docs/destiny_regime_seed81.png)
 
-This shift started with an 83% chance, fell to 31% as its surplus drained, recovered to 84%, then lost its destiny for good and ruined at step 352. The lower panel shows why: surplus against the buffer the shift would need, at each moment, for a 95% chance of never touching the surplus barrier. Each checkpoint also reports the expected loss still to come and how the ruined futures split between surplus and SLA.
+This shift ran calm for over 200 steps at about 90% destiny. Then the regime escalated, from stressed to disrupted to chaotic, and the destiny fell to 56% at step 264 and 30% at step 288, then to nothing, and the shift ruined at step 339 by breaching the SLA. Look at the bottom panel: **surplus was at its highest (245) when the crisis began**. A surplus chart sees nothing wrong until it is too late; the buffer the shift would have needed for a 95% chance of safety jumped from about 250 to over 1,100.
+
+The `--blind` curve is destiny for someone who knows everything about D except which regime it is in (the regime is redrawn from its long-run mix). At step 264 it still says 89%, against 56% for someone who knows the regime, and at step 288 it says 83% against 30%. The gap is what knowing the regime is worth. An observer who sees the pressures sits between the two curves: in this shift the D-state label read CHAOTIC at step 264, a regime ahead of the truth.
 
 At `t = 0` the remaining destiny is one minus the ruin probability, so the two commands cross-check each other.
 
@@ -203,7 +205,7 @@ At `t = 0` the remaining destiny is one minus the ruin probability, so the two c
 Every Q dot has a ledger entry: where it entered, where it was going, how it ended, and how much loss it carried. `ruin simulate` reports the largest contributors and how concentrated the loss was:
 
 ```bash
-uv run ruin simulate --config examples/urban_ruin_shift.yaml --seed 56
+uv run ruin simulate --config examples/urban_ruin_shift.yaml --seed 81
 ```
 
 The full ledger is `ProbabilitySquare.ledger()`; a trajectory result carries `top_contributors`, `loss_concentration`, and `loss_field` (loss accrued per cell). Set `visualization.heatmap_field: accumulated_loss` to watch the loss map build up in the GIF.
@@ -222,23 +224,27 @@ moves each parameter down and up by 10% and ranks them by effect on the odds of 
 
 | Parameter (moved ±10%) | Ruin at −10% | Ruin at +10% | Elasticity |
 | --- | --- | --- | --- |
-| `qdots.*.time_window` | 74.0% | 0.5% | -31.6 |
-| `processes.travel_drift` | 53.5% | 3.0% | -18.0 |
-| `disruption_field.mean_initial_intensity` | 4.0% | 47.5% | +15.3 |
-| `disruption_field.shock_arrival_rate` | 4.5% | 39.0% | +13.0 |
-| `qdots.*.delay_penalty` | 8.0% | 16.5% | +4.1 |
-| `qdots.*.completion_reward` | 14.0% | 8.5% | -2.8 |
-| `processes.demand_arrival_rate` | 16.5% | 13.0% | -1.4 |
-| `ruin.initial_buffer` | 11.5% | 9.5% | -1.1 |
-| `processes.jump_intensity` | 13.5% | 13.0% | -0.2 |
+| `qdots.*.time_window` | 28.5% | 7.5% | -7.9 |
+| `disruption_field.shock_arrival_rate` | 9.5% | 26.0% | +6.0 |
+| `disruption_field.mean_initial_intensity` | 9.0% | 23.5% | +5.7 |
+| `processes.travel_drift` | 26.0% | 13.0% | -4.3 |
+| `qdots.*.delay_penalty` | 11.0% | 13.5% | +1.2 (noise) |
+| `processes.jump_intensity` | 16.5% | 14.5% | -0.8 (noise) |
+| `processes.demand_arrival_rate` | 14.5% | 16.5% | +0.8 (noise) |
+| `qdots.*.completion_reward` | 13.5% | 12.5% | -0.4 (noise) |
+| `ruin.initial_buffer` | 13.0% | 12.5% | -0.2 (noise) |
 
-An elasticity of 15 means a 1% increase multiplies the odds of ruin by about 1.16. The top four are differences far beyond Monte Carlo noise; the output flags the ones that are not (`within_noise`).
+An elasticity of 6 means a 1% increase multiplies the odds of ruin by about 1.06. Effects inside Monte Carlo noise are flagged (`within_noise`); do not read a sign into them. Four levers matter: time windows, shock rate, shock size, and travel speed. The economics (penalties, rewards, demand) and the buffer do not move the answer by a detectable amount: a 10% bigger buffer is tiny next to the losses of a crisis.
+
+The same ranking on the memoryless version of this scenario (v0.6) gave elasticities three to four times larger (time windows −32, travel speed −18, shock size +15, shock rate +13). That cliff was a property of memoryless disruption, not of logistics: when disruption arrives in bursts, a small change in the average moves ruin less.
 
 ```bash
 uv run ruin uncertainty --config examples/urban_ruin_shift.yaml
 ```
 
-goes one step further. The config lists how well each parameter is known (`risk.parameter_uncertainty`: here shock rate, shock size, and demand to 10%, travel speed to 5%, jump rate to 20%). The command draws 40 plausible parameter sets and estimates the ruin probability for each. For the reference scenario the ruin probability across draws has a median of 16%, a 5% to 95% range of 0% to 75%, and averages 28%, against about 12% when the parameters are taken as exact. **For this model, not knowing the parameters matters far more than Monte Carlo error**, and admitting it roughly doubles the chance of ruin.
+goes one step further. The config lists how well each parameter is known (`risk.parameter_uncertainty`: here shock rate, shock size, and demand to 10%, travel speed to 5%, jump rate to 20%). The command draws 40 plausible parameter sets and estimates the ruin probability for each. For the reference scenario the ruin probability across draws has a median of 16.5%, a 5% to 95% range of 1% to 41%, and averages 19%, against 16% from the 1,000-path run with the parameters taken as exact. Not knowing the parameters widens the answer far more than Monte Carlo error does, but unlike in the memoryless model it does not push it toward certainty: no draw ruined more than half the time.
+
+Two kinds of uncertainty are now visible side by side. **Parameter uncertainty** spreads the ruin probability from about 1% to 41%. **Structural uncertainty** (`ruin structure`) moves it from 0% to 16% depending on whether disruption is memoryless or clustered. Neither dominates, and both are much larger than the few points of sampling error around any single estimate.
 
 ---
 
@@ -396,9 +402,12 @@ These are explicitly deferred until the abstract mechanics are solid and reprodu
 
 **Done in v0.6 (making destiny measurable):** remaining destiny as a curve over the shift; a per-Q-dot loss ledger, loss map, and Expected Shortfall split by type; parameter sensitivity and parameter uncertainty; an SLA defined on missed deadlines; a rebalanced reference scenario where both ruin barriers are live.
 
+**Done in v0.7 (a regime-driven D):** a hidden regime of D that generates disruption in persistent, heavy-tailed bursts and is pulled by D's own pressures; load-dependent persistence of disruption; destiny with and without knowledge of the regime; a stylized-facts suite (`ruin facts`) that the memoryless model fails; a structure ensemble (`ruin structure`) at equal mean disruption.
+
 **Next (chaotic organization and hedging):**
 - Detection of clusters, corridors, and ruin zones; shock attribution by `shock_types`
-- Stronger Q-to-D feedback (congestion that slows travel), which today is weak
+- A posterior over the hidden regime: an observer between "knows the regime" and "does not", from the D-state history
+- Congestion that slows travel (density-dependent speed), which today only affects pressure and persistence
 - Deadlines that depend on trip length: today a fixed promise makes long trips carry almost all the risk
 - A policy layer: buffers, backup capacity, and rerouting compared by ruin probability reduced per unit cost
 
@@ -407,6 +416,7 @@ These are explicitly deferred until the abstract mechanics are solid and reprodu
 - Fleet/depot constraints
 - Calibration against real logistics data
 - Hedging and backup-capacity policies
+- Regime and disruption parameters estimated from data (the regime chain is a natural fit for hidden-Markov methods)
 
 ---
 
