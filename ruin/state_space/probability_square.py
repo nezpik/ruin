@@ -20,6 +20,7 @@ from ruin.metrics.pressure import (
     global_order_pressure,
 )
 from ruin.state_space.disruption_field import DisruptionField
+from ruin.state_space.regime import REGIMES, Regime, RegimeProcess
 
 QDOT_TYPES = (QDotType.STANDARD, QDotType.EXPRESS, QDotType.BULKY)
 
@@ -64,6 +65,12 @@ class ProbabilitySquare:
         self.base_risk = float(square.base_risk_intensity)
         self.congestion_memory = float(square.congestion_memory)
         self.snapshot_interval = int(square.snapshot_interval)
+        self.regime_process = (
+            RegimeProcess(square.regime, square.d_state_thresholds)
+            if square.regime.enabled
+            else None
+        )
+        self.regime_level = 0
         # Per-cell memory of where Q dots have recently stalled, in [0, 1].
         self.congestion = np.zeros(self.width * self.height, dtype=float)
 
@@ -127,6 +134,21 @@ class ProbabilitySquare:
 
         self._spawn(np.repeat(np.arange(3), counts))
         self.initial_qdots = int(counts.sum())
+        if self.regime_process is not None:
+            self.regime_level = self.regime_process.initial_level(self.rng)
+
+    def forget_regime(self) -> None:
+        """Replace the hidden regime with a draw from its long-run mix.
+
+        Used to ask what the future looks like to someone who knows the whole
+        state of D except which regime it is in."""
+        if self.regime_process is not None:
+            self.regime_level = self.regime_process.stationary_level(self.rng)
+
+    @property
+    def regime(self) -> Regime | None:
+        """The hidden regime D is in right now (None when regimes are off)."""
+        return REGIMES[self.regime_level] if self.regime_process is not None else None
 
     # ------------------------------------------------------------------ Q dots
 
@@ -288,23 +310,46 @@ class ProbabilitySquare:
         dt = self.dt
         self.time += 1
 
+        # 0. The regime of D moves, pulled by last step's pressures.
+        rate_mult = size_mult = noise_mult = 1.0
+        if self.regime_process is not None:
+            regime_cfg = self.regime_process.config
+            self.regime_level = self.regime_process.step(
+                self.regime_level,
+                self.global_chaos_pressure,
+                self.global_order_pressure,
+                self.rng,
+            )
+            rate_mult = regime_cfg.shock_rate[self.regime_level]
+            size_mult = regime_cfg.shock_size[self.regime_level]
+            noise_mult = regime_cfg.travel_noise[self.regime_level]
+
         # 1. New uncertainty enters: demand arrivals and disruption shocks.
         arrivals = int(self.rng.poisson(proc.demand_arrival_rate * dt))
         self._spawn(self.rng.choice(3, size=arrivals, p=self._type_mix))
 
+        shock_count, shock_mass = 0, 0.0
         if field_cfg.enabled:
             xs, ys, intensities = sample_shock_events(
-                field_cfg.shock_arrival_rate,
-                field_cfg.mean_initial_intensity,
+                field_cfg.shock_arrival_rate * rate_mult,
+                field_cfg.mean_initial_intensity * size_mult,
                 self.width,
                 self.height,
                 dt=dt,
                 rng=self.rng,
+                size_sigma=field_cfg.shock_size_sigma,
             )
             self.field.inject_many(xs, ys, intensities)
+            shock_count, shock_mass = len(xs), float(intensities.sum())
 
-        # 2. The field spreads and decays.
-        self.field.step()
+        # 2. The field spreads and decays; where Q dots are stalled it lingers.
+        gain_map = None
+        if field_cfg.congestion_persistence > 0:
+            base = self.field.gain
+            load = self.congestion.reshape(self.height, self.width)
+            gain_map = base + field_cfg.congestion_persistence * load * (field_cfg.max_gain - base)
+        field_retention = self.field.retention(gain_map)
+        self.field.step(gain_map)
 
         # 3. Q dots move toward their destinations through the field.
         self._exposure = (
@@ -321,8 +366,8 @@ class ProbabilitySquare:
             self._drift_mult[self._type],
             self._vol_mult[self._type],
             proc.travel_drift,
-            proc.travel_volatility,
-            proc.jump_intensity,
+            proc.travel_volatility * noise_mult,
+            proc.jump_intensity * noise_mult,
             proc.jump_mean_size,
             self.rng,
             dt=dt,
@@ -406,6 +451,10 @@ class ProbabilitySquare:
             "penalty": round(penalty, 6),
             "penalty_by_type": [round(float(v), 6) for v in penalty_by_type],
             "income": round(income, 6),
+            "regime": self.regime.value if self.regime is not None else None,
+            "shock_count": shock_count,
+            "shock_mass": round(shock_mass, 6),
+            "field_retention": round(field_retention, 6),
             "late_count": late_count,
             "missed": int(newly_late.sum()),
             "active_count": active_count,

@@ -2,14 +2,22 @@
 
 The authoritative schema is `ruin/config_models.py` (Pydantic, strict: unknown
 keys are rejected). The reference scenario is `examples/urban_ruin_shift.yaml`,
-reproduced here.
+reproduced here. `examples/urban_ruin_shift_thin.yaml` is the same operation
+with memoryless, light-tailed disruption (no hidden regime), kept as a baseline
+for comparing structures.
 
 ```yaml
-# Urban Ruin Shift: the reference RUIN scenario.
+# Urban Ruin Shift: the reference RUIN scenario, with a regime-driven D.
 #
-# Calibrated so that ruin is a real question: about one shift in eight ruins
-# over the 480-step horizon (see `ruin risk`), some by exhausting the surplus
-# and some by breaching the SLA. All quantities are per step.
+# D has a hidden regime (stable, stressed, disrupted, chaotic) that generates
+# disruption in persistent, heavy-tailed bursts, and that is pulled by D's own
+# pressures. Most shifts are ordinary and a minority are crises. Compare with
+# urban_ruin_shift_thin.yaml, the same operation with memoryless, light-tailed
+# disruption.
+#
+# The numbers are illustrative: they describe a plausible stylised operation,
+# not a calibrated one, and the ruin probability this file produces is a
+# property of the scenario, not a finding. All quantities are per step.
 
 simulation:
   name: urban_ruin_shift
@@ -59,17 +67,27 @@ probability_square:
   snapshot_interval: 1
   initial_d_state: stable
   d_state_thresholds:
-    stressed_chaos_pressure: 0.37
-    disrupted_chaos_pressure: 0.44
-    chaotic_chaos_pressure: 0.52
+    stressed_chaos_pressure: 0.25   # chaos pressure at which each D-state begins;
+    disrupted_chaos_pressure: 0.37  # set from where the hidden regimes put it
+    chaotic_chaos_pressure: 0.53
     recovering_decay_ratio: 0.05
-  order_pressure_weight: 1.0
-  chaos_pressure_weight: 1.0
   qdot_feedback_weight: 0.5
+  # The hidden regime of D. Level 0 is stable, level 3 chaotic. The chain moves
+  # one level at a time; each level scales disruption and travel noise.
+  regime:
+    enabled: true
+    start: stationary          # a shift can begin on a bad day
+    escalate: [0.015, 0.02, 0.02]   # per-step chance of moving up from level k
+    relax: [0.05, 0.04, 0.05]       # per-step chance of moving down to level k
+    shock_rate: [0.5, 1.0, 1.5, 2.2]
+    shock_size: [1.0, 1.0, 1.2, 1.4]
+    travel_noise: [0.8, 1.0, 1.3, 1.8]
+    pressure_pull: 1.5         # the regime is pulled toward the level D's chaos pressure points to
+    order_support: 0.2         # healthy flow resists escalation and speeds recovery
 
 disruption_field:
   enabled: true
-  shock_arrival_rate: 0.72      # expected shocks per step, whole grid
+  shock_arrival_rate: 0.693     # base shocks per step, whole grid (times the regime's rate)
   shock_types:
     - congestion_wave
     - accident
@@ -77,6 +95,7 @@ disruption_field:
     - failed_handoff
     - demand_burst
   mean_initial_intensity: 285.0 # a cell is fully blocked at intensity 5
+  shock_size_sigma: 1.0         # lognormal sizes: rare shocks are far larger than typical ones
   propagation_radius: 2
   propagation_decay: 0.55
   propagation_share: 0.4        # share of surviving intensity that spreads
@@ -84,12 +103,14 @@ disruption_field:
   recovery_rate: 0.02
   memory_weight: 0.95
   qdot_exposure_multiplier: 1.0
+  congestion_persistence: 0.3   # where Q dots are stalled, disruption lingers...
+  max_gain: 0.97                # ...but never reaches 1: it still cannot amplify itself
 
 ruin:
   initial_buffer: 120
   recovery_rate: 0.0
   barrier: 0.0
-  sla_threshold: 0.05      # SLA: at most 5% of deadlines missed...
+  sla_threshold: 0.08      # SLA: at most 8% of deadlines missed...
   sla_window: 60           # ...over any 60 consecutive steps
   rule: surplus_or_sla
 
@@ -128,12 +149,22 @@ visualization:
   penalty, speed, and on-time completion reward. New arrivals use the same mix.
 - `processes` defines demand arrivals and the jump-diffusion that moves each
   Q dot toward its destination.
-- `probability_square` defines the D-state thresholds on chaos pressure, how
+- `probability_square.regime` defines the hidden regime of D: a four-level chain
+  (stable, stressed, disrupted, chaotic) that generates disruption. `escalate` and
+  `relax` are per-step chances of moving up from level k and down to level k;
+  `shock_rate`, `shock_size`, and `travel_noise` are what each level does;
+  `pressure_pull` pulls the regime toward the level D's chaos pressure points to;
+  `order_support` lets healthy flow resist escalation and speed recovery. With
+  `enabled: false` (the default) disruption is memoryless.
+- `probability_square` also defines the D-state thresholds on chaos pressure, how
   strongly late or failed Q dots feed back into the field, the background risk
   in every cell, how long cells remember stalled Q dots (`congestion_memory`),
   what happens to disruption at the edge of `D` (`boundary_mode`), and how
   often heavy snapshots are kept.
-- `disruption_field` defines shock arrivals, spread, and decay. The field is
+- `disruption_field` defines shock arrivals, sizes, spread, and decay.
+  `shock_size_sigma` makes sizes lognormal (heavy-tailed) at the same mean, and
+  `congestion_persistence` lets disruption linger where Q dots are stalled, up to
+  `max_gain` < 1. The field is
   subcritical by construction: `memory_weight * (1 - temporal_decay -
   recovery_rate)` must be below 1, so every shock eventually fades.
 - `ruin` defines the surplus buffer, the barrier, the SLA, and which rule
@@ -154,8 +185,6 @@ visualization:
 These are validated but do not change anything yet:
 
 - `qdots.initial_distribution`: only `uniform` exists.
-- `probability_square.order_pressure_weight`, `chaos_pressure_weight`: no
-  current formula uses a weight; the D-state thresholds already set the scale.
 - `disruption_field.shock_types`: reserved for shock attribution.
 - `risk.report_*`: every statistic is always reported.
 - `visualization.enabled`: the `--visualize` flag decides.

@@ -24,6 +24,7 @@ _PATH_FIELDS = (
     "on_time_rate",
     "loss_by_type",
     "loss_concentration",
+    "regime_occupancy",
 )
 
 
@@ -196,6 +197,13 @@ def run_monte_carlo(
         for r in results
     ]
 
+    occupancies = [r["regime_occupancy"] for r in results if r["regime_occupancy"] is not None]
+    mean_occupancy = (
+        {name: round(mean(o[name] for o in occupancies), 4) for name in occupancies[0]}
+        if occupancies
+        else None
+    )
+
     rng = np.random.default_rng(base_seed)
     var_ci, es_ci = bootstrap_tail_ci(losses, level, level, ci_boot, rng)
     loss_std = stdev(losses) if len(losses) > 1 else 0.0
@@ -218,6 +226,7 @@ def run_monte_carlo(
         "expected_shortfall_by_type": es_by_type,
         "share_of_qdots_with_loss": round(mean(with_loss), 6) if with_loss else 0.0,
         "loss_share_of_top_1pct_qdots": round(mean(top_shares), 4) if top_shares else None,
+        "mean_regime_occupancy": mean_occupancy,
         "mean_final_surplus": round(mean(final_surpluses), 4) if final_surpluses else 0.0,
         "mean_min_surplus": round(mean(min_surpluses), 4) if min_surpluses else None,
         "mean_on_time_rate": round(mean(on_time), 4) if on_time else None,

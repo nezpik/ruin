@@ -14,6 +14,8 @@ from ruin.config_models import RuinConfig
 from ruin.risk.classical import validate_against_cramer_lundberg
 from ruin.risk.destiny import plot_destiny, run_destiny
 from ruin.risk.ruin_probability import run_monte_carlo
+from ruin.risk.structure import run_structure_ensemble
+from ruin.risk.stylized import run_stylized_facts
 from ruin.risk.uncertainty import run_parameter_uncertainty, run_sensitivity
 from ruin.simulation.agent_based import run_trajectory
 from ruin.viz.square import save_field_gif, save_text_frames
@@ -96,6 +98,11 @@ def build_parser() -> argparse.ArgumentParser:
     destiny.add_argument("--max-steps", type=int, default=None)
     destiny.add_argument("--jobs", type=int, default=None)
     destiny.add_argument("--plot", metavar="PATH", default=None, help="Write the curve as a PNG")
+    destiny.add_argument(
+        "--blind",
+        action="store_true",
+        help="Also estimate destiny for a viewer who does not know D's hidden regime",
+    )
 
     sensitivity = subparsers.add_parser(
         "sensitivity", help="Rank parameters by how strongly they move the ruin probability"
@@ -119,6 +126,22 @@ def build_parser() -> argparse.ArgumentParser:
     uncertainty.add_argument("--draws", type=int, default=40)
     uncertainty.add_argument("--paths", type=int, default=100, help="Paths per draw")
     uncertainty.add_argument("--jobs", type=int, default=None)
+
+    facts = subparsers.add_parser(
+        "facts",
+        help="Check a scenario against stylized facts of logistics disruption",
+    )
+    facts.add_argument("--config", required=True)
+    facts.add_argument("--paths", type=int, default=80, help="Simulated shifts per measurement")
+    facts.add_argument("--jobs", type=int, default=None)
+
+    structure = subparsers.add_parser(
+        "structure",
+        help="Ruin risk under memoryless, heavy-tailed, and clustered disruption of equal mean",
+    )
+    structure.add_argument("--config", required=True)
+    structure.add_argument("--paths", type=int, default=300)
+    structure.add_argument("--jobs", type=int, default=None)
 
     validate = subparsers.add_parser(
         "validate",
@@ -212,10 +235,26 @@ def main(argv: list[str] | None = None) -> int:
             branches=args.branches,
             max_steps=args.max_steps,
             n_jobs=args.jobs,
+            blind=args.blind,
         )
         if args.plot:
             logger.info("Destiny curve written to %s", plot_destiny(result, args.plot))
         result.pop("surplus_path")
+        result.pop("regime_path")
+        logger.info(json.dumps(result, indent=2))
+        return 0
+
+    if args.command == "facts":
+        report = run_stylized_facts(config, paths=args.paths, n_jobs=args.jobs)
+        logger.info(json.dumps(report, indent=2))
+        return 0 if report["passed"] else 1
+
+    if args.command == "structure":
+        try:
+            result = run_structure_ensemble(config, paths=args.paths, n_jobs=args.jobs)
+        except ValueError as exc:
+            logger.error("%s", exc)
+            return 2
         logger.info(json.dumps(result, indent=2))
         return 0
 

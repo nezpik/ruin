@@ -1,0 +1,116 @@
+# Urban Ruin Shift, thin version: memoryless, light-tailed disruption.
+#
+# The reference scenario before D had a regime: shocks arrive at a constant
+# rate, land uniformly, and have exponential sizes. Kept as the baseline for
+# comparing structures (see `ruin structure`) and as a regression anchor.
+#
+# Calibrated so that ruin is a real question: about one shift in eight ruins
+# over the 480-step horizon (see `ruin risk`), some by exhausting the surplus
+# and some by breaching the SLA. All quantities are per step.
+
+simulation:
+  name: urban_ruin_shift
+  seed: 42
+  grid_width: 30
+  grid_height: 30
+  shift_duration: 480
+  dt: 1
+
+qdots:
+  # Initial population by type. The same mix is used for new arrivals.
+  n_standard: 120
+  n_express: 40
+  n_bulky: 40
+  initial_distribution: uniform
+  standard:
+    time_window: 70          # steps allowed to reach the destination
+    delay_penalty: 0.2       # loss per step while late
+    drift_multiplier: 1.0
+    volatility_multiplier: 1.0
+    completion_reward: 0.05  # surplus earned by an on-time delivery
+  express:
+    time_window: 46
+    delay_penalty: 0.5
+    drift_multiplier: 1.25
+    volatility_multiplier: 1.2
+    completion_reward: 0.12
+  bulky:
+    time_window: 104
+    delay_penalty: 0.4
+    drift_multiplier: 0.7
+    volatility_multiplier: 0.9
+    completion_reward: 0.08
+
+processes:
+  demand_arrival_rate: 8.0   # expected new Q dots per step
+  travel_drift: 1.2          # mean cells travelled per step
+  travel_volatility: 0.4
+  jump_intensity: 0.05       # per-Q-dot rate of sudden setbacks
+  jump_mean_size: 2.0        # mean setback, in cells of lost progress
+  jump_size_distribution: exponential
+
+probability_square:
+  base_risk_intensity: 0.0
+  congestion_memory: 0.85
+  boundary_mode: reflect
+  snapshot_interval: 1
+  initial_d_state: stable
+  d_state_thresholds:
+    stressed_chaos_pressure: 0.37
+    disrupted_chaos_pressure: 0.44
+    chaotic_chaos_pressure: 0.52
+    recovering_decay_ratio: 0.05
+  qdot_feedback_weight: 0.5
+
+disruption_field:
+  enabled: true
+  shock_arrival_rate: 0.72      # expected shocks per step, whole grid
+  shock_types:
+    - congestion_wave
+    - accident
+    - weather_cell
+    - failed_handoff
+    - demand_burst
+  mean_initial_intensity: 285.0 # a cell is fully blocked at intensity 5
+  propagation_radius: 2
+  propagation_decay: 0.55
+  propagation_share: 0.4        # share of surviving intensity that spreads
+  temporal_decay: 0.03
+  recovery_rate: 0.02
+  memory_weight: 0.95
+  qdot_exposure_multiplier: 1.0
+
+ruin:
+  initial_buffer: 120
+  recovery_rate: 0.0
+  barrier: 0.0
+  sla_threshold: 0.05      # SLA: at most 5% of deadlines missed...
+  sla_window: 60           # ...over any 60 consecutive steps
+  rule: surplus_or_sla
+
+risk:
+  monte_carlo_paths: 1000
+  confidence_level: 0.95
+  report_time_to_ruin: true
+  report_d_state_path: true
+  report_chaotic_organization: true
+  report_var: true
+  report_expected_shortfall: true
+  # How well each parameter is known (relative standard deviation), for
+  # `ruin uncertainty`.
+  parameter_uncertainty:
+    disruption_field.shock_arrival_rate: 0.10
+    disruption_field.mean_initial_intensity: 0.10
+    processes.travel_drift: 0.05
+    processes.jump_intensity: 0.20
+    processes.demand_arrival_rate: 0.10
+
+visualization:
+  enabled: true
+  frames: 300
+  show_qdot_types: true
+  show_ruin_event: true
+  show_disruption_field: true
+  show_d_state: true
+  show_order_chaos_pressure: true
+  heatmap_field: disruption_intensity

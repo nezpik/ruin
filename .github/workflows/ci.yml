@@ -30,3 +30,5 @@ jobs:
         run: python -m pytest -q
       - name: Validate against Cramér-Lundberg
         run: ruin validate
+      - name: Stylized facts of the reference scenario
+        run: ruin facts --config examples/urban_ruin_shift.yaml

@@ -72,8 +72,10 @@ class DisruptionField:
         if len(xs):
             np.add.at(self.grid, (ys, xs), intensities)
 
-    def step(self) -> None:
-        surviving = self.grid * self.gain
+    def step(self, gain_map: np.ndarray | None = None) -> None:
+        """Advance one step. `gain_map` gives each cell its own retention
+        (every entry must be below 1); by default all cells keep `self.gain`."""
+        surviving = self.grid * (self.gain if gain_map is None else gain_map)
         nxt = surviving * (1.0 - self.propagation_share)
         if self.kernel and self.propagation_share > 0:
             nxt += self._spread(surviving * self.propagation_share)
@@ -103,6 +105,14 @@ class DisruptionField:
 
     def total(self) -> float:
         return float(self.grid.sum())
+
+    def retention(self, gain_map: np.ndarray | None = None) -> float:
+        """Intensity-weighted mean retention: the fraction of the field's mass
+        that survives a step. Close to 1 means disruption is close to critical."""
+        if gain_map is None:
+            return self.gain
+        mass = float(self.grid.sum())
+        return float((self.grid * gain_map).sum() / mass) if mass > 1e-12 else self.gain
 
     def snapshot(self) -> list[list[float]]:
         rounded: list[list[float]] = np.round(self.grid, 4).tolist()

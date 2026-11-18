@@ -183,7 +183,9 @@ def animate_probability_square(
 
         time_text.set_text(f"t = {snap['time']}")
         if viz.show_d_state:
-            state_text.set_text(f"D = {snap['d_state']}")
+            regime = snap.get("regime")
+            hidden = f"\nregime: {regime}" if regime else ""
+            state_text.set_text(f"D = {snap['d_state']}{hidden}")
         if viz.show_order_chaos_pressure:
             pressure_text.set_text(
                 f"chaos={snap.get('chaos_pressure', 0.0):.2f}  "

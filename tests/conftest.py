@@ -24,6 +24,17 @@ def golden_config(golden_config_path: Path) -> dict[str, Any]:
 
 
 @pytest.fixture(scope="session")
+def thin_config_path() -> Path:
+    """The memoryless, light-tailed version of the reference scenario."""
+    return Path(__file__).parent.parent / "examples" / "urban_ruin_shift_thin.yaml"
+
+
+@pytest.fixture(scope="session")
+def thin_config(thin_config_path: Path) -> RuinConfig:
+    return load_ruin_config(thin_config_path)
+
+
+@pytest.fixture(scope="session")
 def golden_ruin_config(golden_config_path: Path) -> RuinConfig:
     """Fully validated Pydantic RuinConfig (v0.2 recommended)."""
     return load_ruin_config(golden_config_path)
@@ -81,8 +92,6 @@ def small_config() -> dict[str, Any]:
                 "chaotic_chaos_pressure": 0.75,
                 "recovering_decay_ratio": 0.30,
             },
-            "order_pressure_weight": 1.0,
-            "chaos_pressure_weight": 1.0,
         },
         "disruption_field": {
             "enabled": True,

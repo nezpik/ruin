@@ -4,11 +4,11 @@
 
 [![Python](https://img.shields.io/badge/Python-3.11--3.14-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![v0.6.0](https://img.shields.io/badge/Version-v0.6.0-green.svg)](https://github.com/nezpik/ruin)
+[![v0.7.0](https://img.shields.io/badge/Version-v0.7.0-green.svg)](https://github.com/nezpik/ruin)
 
 RUIN is a framework for measuring and visualizing logistics systems as stochastic risk-bearing portfolios. It translates quantitative finance concepts such as Cramér-Lundberg ruin theory, jump diffusion, geometric Brownian motion, Monte Carlo paths, VaR, and Expected Shortfall into a logistics language built around physical uncertainty, service failure, and systemic collapse.
 
-> **Status (v0.6)**: This document is the conceptual foundation and north star. The engine now implements it with completable Q dots, a decaying disruption field, and a risk layer validated against classical ruin theory. Where the implemented formulas differ from the first sketches below, the section "Formulas as implemented" says how.
+> **Status (v0.7)**: This document is the conceptual foundation and north star. The engine now implements it with completable Q dots, a decaying disruption field, and a risk layer validated against classical ruin theory. Where the implemented formulas differ from the first sketches below, the section "Formulas as implemented" says how.
 
 The central object is the **Probability Square**: an abstract two-dimensional destiny frame `D` where many **Q dots** move through possible physical futures. RUIN is not trying to make logistics look deterministic, and it is not trying to predict destiny perfectly. RUIN frames chaos so that physical uncertainty can move, take shape, and become measurable.
 
@@ -38,6 +38,7 @@ The shift begins with finite operational surplus. Q dots enter and move through 
 - **Chaotic organization**: Disruption is not only disorder. It can produce temporary structures such as clusters, jams, funnels, forced corridors, recovery zones, and ruin zones.
 - **Co-evolution of Q and D**: `D` shapes Q-dot motion, but Q-dot density, delay, failure, and recovery also reshape `D`.
 - **Ruin as system truth**: A logistics system has failed when its operational surplus is exhausted or when its service-level barrier is breached.
+- **Unpredictability has structure**: Logistics disruption is not a constant drizzle of independent small shocks. It arrives in persistent bursts, its sizes are heavy-tailed, and the system's own state changes how likely the next burst is. A model that averages this away is predicting something the world does not do.
 - **Visualization as analysis**: The Probability Square is not decoration. It is a way to watch possible futures collide with physical constraints.
 
 ---
@@ -92,6 +93,16 @@ A D-state transition is a regime change in the Probability Square. In v0.1, the 
 | `CHAOTIC` | many Q dots are forced into emergent clusters, stalls, or unstable paths |
 | `RECOVERING` | field intensity decays and order pressure begins to restore flow |
 | `RUINED` | surplus or SLA barrier has been breached |
+
+### Regime of D
+
+The D-state label says what the pressures *look like*. The **regime** says what D is *doing*, and it is what generates disruption. D is in one of four ordered regimes (`STABLE`, `STRESSED`, `DISRUPTED`, `CHAOTIC`), it moves one level at a time, and it stays where it is for a while, so disruption comes in persistent clusters. Each regime changes how often shocks arrive, how large they are, and how noisy travel is.
+
+The regime is **hidden**. What an observer sees is its footprint in the pressures, which is why the D-state label and the regime can disagree: a stressed regime is often read as stable, and a crisis shows up in the pressures only after the field has had time to build. This makes remaining destiny an inference problem: how much destiny a shift has left depends on which regime it is in, and that is never known exactly. `ruin destiny --blind` measures what knowing the regime is worth.
+
+The regime and the pressures **co-evolve**. Late deliveries raise chaos pressure; chaos pressure pulls the regime toward worse levels; a worse regime brings more and larger shocks; healthy flow (order pressure) resists escalation and speeds recovery. Where Q dots are stalled, disruption also lingers longer, so jams persist and the disruption field gets close to critical under load, though it can never amplify itself.
+
+This is a hypothesis about how logistics systems behave, not an established fact, and it is tested rather than assumed: `ruin facts` checks that a scenario reproduces eight qualitative regularities (clustering, persistence, heavy-tailed shifts and trips, good days and bad days, the flaw of averages, partial observability, and co-evolution), and `ruin structure` shows how much a ruin probability depends on the shape of disruption at equal mean.
 
 ### Surplus process
 
@@ -288,7 +299,7 @@ Suggested D-state rule:
 
 These formulas are not final theory. They are v0.1 scaffolding: simple enough to implement, inspect, and replace later.
 
-### Formulas as implemented (v0.6)
+### Formulas as implemented (v0.7)
 
 The scaffolding above has been kept in spirit and made bounded and measurable:
 
@@ -306,8 +317,22 @@ sla_miss_rate              = deadlines_missed / (deadlines_missed + on_time_deli
 destiny(t)                 = P(no ruin before the horizon | everything known at t)
 ```
 
+The hidden regime, with `L` the level chaos pressure points to (how many D-state floors it has reached), `o` order pressure clipped to [0, 1], and `s` the shock-size multiplier of the current level:
+
+```text
+P(up   from k) = escalate[k]  * pull(k, L) * (1 - order_support * o)
+P(down from k) = relax[k-1]   * pull(k, L) * (1 + order_support * o)
+pull(k, L)     = pressure_pull    if the move is toward L
+               = 1/pressure_pull  if the move is away from L
+               = 1                if L = k   (the regime's own band)
+shocks / step  ~ Poisson(base_rate * shock_rate[k])
+shock size     ~ lognormal(mean = base_size * shock_size[k], sigma)        (exponential if sigma = 0)
+retention(cell) = gain + congestion_persistence * congestion(cell) * (max_gain - gain)
+```
+
 - A cell is fully blocked at intensity 5, where travel speed falls to 5% of normal.
 - `CHAOTIC` and `DISRUPTED` are decided by thresholds first. `RECOVERING` is a sharp fall in chaos pressure from an at-least-stressed level.
+- Retention can never exceed `max_gain` < 1, so total disruption between shocks still shrinks by at least that factor each step. Persistence makes jams linger; it does not let them grow.
 - A Q dot earns its completion reward when delivered inside its time window. Once late it costs its delay penalty every step (up to double in a fully blocked cell) until it is delivered late or abandoned.
 - SLA ruin is `sla_miss_rate >= sla_threshold`, judged once a full window has been observed. A deadline is missed at the moment a Q dot's time window runs out, not when it is finally delivered.
 - Remaining destiny is estimated by branching many independent futures from the exact present state. A shift has run out of destiny when it reaches zero.

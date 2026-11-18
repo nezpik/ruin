@@ -33,7 +33,7 @@ def test_load_golden_ruin_config(golden_ruin_config):
     assert isinstance(cfg, RuinConfig)
     assert cfg.simulation.grid_width == 30
     assert cfg.qdots.n_standard == 120
-    assert cfg.disruption_field.shock_arrival_rate == 0.72
+    assert cfg.disruption_field.shock_arrival_rate == 0.693
     assert cfg.disruption_field.gain < 1
 
 

@@ -93,6 +93,86 @@ class DStateThresholds(BaseModel):
         return self
 
 
+REGIME_NAMES = ("stable", "stressed", "disrupted", "chaotic")
+
+
+class RegimeConfig(BaseModel):
+    """The hidden regime of D: what the destiny frame is *doing*, as opposed to
+    what its pressures say it is doing.
+
+    D moves between four levels (stable, stressed, disrupted, chaotic) one
+    step at a time. Each level changes how often disruption arrives, how big
+    it is, and how noisy travel is, so disruption comes in persistent
+    clusters instead of a constant drizzle. The regime is pulled by D's own
+    pressures, which is how Q and D co-evolve: late deliveries raise chaos
+    pressure, chaos pressure escalates the regime, and the regime brings more
+    disruption.
+
+    All hazards are per step. Lists are indexed by level, lowest first.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    # Where each shift starts. `stationary` draws a level from the long-run mix
+    # of the exogenous chain (a shift can begin on a bad day).
+    start: Literal["stable", "stressed", "disrupted", "chaotic", "stationary"] = "stationary"
+    # Spontaneous probability per step of moving up from level k to k+1 ...
+    escalate: list[float] = Field(default_factory=lambda: [0.015, 0.02, 0.02])
+    # ... and of moving down from level k+1 to k.
+    relax: list[float] = Field(default_factory=lambda: [0.05, 0.04, 0.03])
+    # What each level does, as multipliers (level 0 first).
+    shock_rate: list[float] = Field(default_factory=lambda: [1.0, 1.0, 1.0, 1.0])
+    shock_size: list[float] = Field(default_factory=lambda: [1.0, 1.0, 1.0, 1.0])
+    # Multiplies travel volatility and the per-Q-dot setback rate.
+    travel_noise: list[float] = Field(default_factory=lambda: [1.0, 1.0, 1.0, 1.0])
+    # Feedback from pressure: the regime is pulled toward the level D's chaos
+    # pressure points to. A move toward that level is `pressure_pull` times
+    # likelier and a move away from it `pressure_pull` times less likely.
+    # Pressure inside the regime's own band leaves the chain untouched.
+    pressure_pull: float = Field(default=1.0, ge=1.0)
+    # Healthy flow (order pressure) resists escalation and speeds recovery:
+    # escalation is scaled by (1 - order_support * o), relaxation by
+    # (1 + order_support * o), where o is order pressure clipped to [0, 1].
+    order_support: float = Field(default=0.0, ge=0.0, lt=1.0)
+
+    @model_validator(mode="after")
+    def _shapes(self) -> RegimeConfig:
+        for name, length in (
+            ("escalate", 3),
+            ("relax", 3),
+            ("shock_rate", 4),
+            ("shock_size", 4),
+            ("travel_noise", 4),
+        ):
+            values = getattr(self, name)
+            if len(values) != length:
+                raise ValueError(f"regime.{name} needs {length} values, got {len(values)}")
+            if any(v < 0 for v in values):
+                raise ValueError(f"regime.{name} must not be negative")
+        if any(not 0 <= v < 1 for v in self.escalate):
+            raise ValueError("regime.escalate entries must be probabilities in [0, 1)")
+        if any(not 0 < v <= 1 for v in self.relax):
+            raise ValueError("regime.relax entries must be probabilities in (0, 1]")
+        return self
+
+    def stationary(self) -> list[float]:
+        """Long-run share of time at each level for the exogenous chain
+        (pressure feedback off). The chain is a birth-death chain, so detailed
+        balance gives it exactly: pi[k+1] / pi[k] = escalate[k] / relax[k]."""
+        weights = [1.0]
+        for up, down in zip(self.escalate, self.relax, strict=True):
+            weights.append(weights[-1] * up / down)
+        total = sum(weights)
+        return [w / total for w in weights]
+
+    def exogenous_mean_mass(self) -> float:
+        """Long-run mean of shock_rate * shock_size under `stationary()`: the
+        average disruption mass per unit of base rate and size."""
+        pi = self.stationary()
+        return sum(p * r * z for p, r, z in zip(pi, self.shock_rate, self.shock_size, strict=True))
+
+
 class ProbabilitySquareConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -106,9 +186,9 @@ class ProbabilitySquareConfig(BaseModel):
     snapshot_interval: int = Field(default=1, ge=1)
     initial_d_state: Literal["stable", "stressed", "disrupted", "chaotic", "recovering"] = "stable"
     d_state_thresholds: DStateThresholds
-    order_pressure_weight: float = Field(default=1.0, ge=0)
-    chaos_pressure_weight: float = Field(default=1.0, ge=0)
     qdot_feedback_weight: float = Field(default=0.5, ge=0)
+    # The hidden regime of D (off by default: disruption is then memoryless).
+    regime: RegimeConfig = Field(default_factory=RegimeConfig)
 
 
 class DisruptionFieldConfig(BaseModel):
@@ -119,6 +199,10 @@ class DisruptionFieldConfig(BaseModel):
     shock_arrival_rate: float = Field(ge=0)
     shock_types: list[str] = Field(default_factory=list)
     mean_initial_intensity: float = Field(default=2.0, ge=0)
+    # Spread of shock sizes. 0 gives exponential sizes (coefficient of variation 1);
+    # above 0, sizes are lognormal with this log-scale sigma and the same mean.
+    # sigma 1.5 gives a coefficient of variation of about 3.
+    shock_size_sigma: float = Field(default=0.0, ge=0)
     propagation_radius: int = Field(default=2, ge=0)
     propagation_decay: float = Field(default=0.55, ge=0, le=1)
     # Fraction of a cell's surviving intensity that moves to its neighbours each step.
@@ -127,6 +211,13 @@ class DisruptionFieldConfig(BaseModel):
     recovery_rate: float = Field(default=0.08, ge=0, le=1)
     memory_weight: float = Field(default=0.85, ge=0, le=1)
     qdot_exposure_multiplier: float = Field(default=1.0, ge=0)
+    # Load-dependent persistence: where Q dots are stalled, disruption lingers.
+    # Retention in a cell moves from `gain` toward `max_gain` in proportion to
+    # `congestion_persistence` times the cell's congestion (0 to 1). Because
+    # retention can never exceed `max_gain` < 1, the field still cannot amplify
+    # itself, but under load it gets close to critical: jams persist.
+    congestion_persistence: float = Field(default=0.0, ge=0, le=1)
+    max_gain: float = Field(default=0.985, gt=0, lt=1)
 
     @property
     def gain(self) -> float:
@@ -142,6 +233,8 @@ class DisruptionFieldConfig(BaseModel):
                 "disruption field would never decay: "
                 "memory_weight * (1 - temporal_decay - recovery_rate) must be < 1"
             )
+        if self.congestion_persistence > 0 and self.max_gain < self.gain:
+            raise ValueError("max_gain must be at least the field's base gain")
         return self
 
 

@@ -34,13 +34,19 @@ _Branch = tuple[bool, str | None, float, float]
 
 
 def _run_branches(
-    args: tuple[ProbabilitySquare, NetworkSurplus, int, list[list[int]]],
+    args: tuple[ProbabilitySquare, NetworkSurplus, int, list[list[int]], bool],
 ) -> list[_Branch]:
-    """Worker: play out several independent futures from one present state."""
-    square, network, horizon, seeds = args
+    """Worker: play out several independent futures from one present state.
+
+    With `blind` set, each future first forgets which hidden regime D is in
+    and draws one from the regime's long-run mix.
+    """
+    square, network, horizon, seeds, blind = args
     out: list[_Branch] = []
     for entropy in seeds:
         future = square.fork(np.random.SeedSequence(entropy))
+        if blind:
+            future.forget_regime()
         surplus = network.fork()
         start = len(surplus.surplus_path)
         loss_before = surplus.cumulative_loss
@@ -64,6 +70,7 @@ def run_destiny(
     confidence: float | None = None,
     max_steps: int | None = None,
     n_jobs: int | None = None,
+    blind: bool = False,
 ) -> dict[str, Any]:
     """Follow one shift and estimate its remaining destiny every `every` steps.
 
@@ -76,6 +83,14 @@ def run_destiny(
       `confidence` quantile of the futures' worst drawdown). Compare it with
       `surplus`: the gap is the shift's margin, in the units of the buffer.
     - `expected_future_loss`: mean delay penalty still to come.
+
+    When the scenario has a hidden regime, the futures above start from the
+    true present, regime included: what someone who could see the regime
+    would conclude. With `blind=True` each checkpoint also reports
+    `destiny_blind`, from futures that know the whole state of D except the
+    regime, which they redraw from its long-run mix. The gap between the two
+    is what knowing the regime is worth; an observer who sees the pressures
+    sits somewhere in between.
     """
     cfg = as_config(config)
     base_seed = int(cfg.simulation.seed if seed is None else seed)
@@ -87,7 +102,9 @@ def run_destiny(
     network = make_network(cfg)
 
     # Follow the observed shift, keeping a copy of the present at each checkpoint.
-    checkpoints: list[tuple[int, float, str, float, ProbabilitySquare, NetworkSurplus]] = []
+    checkpoints: list[
+        tuple[int, float, str, float, ProbabilitySquare, NetworkSurplus, str | None]
+    ] = []
     for t in range(0, horizon, max(1, every)):
         advance_shift(square, network, t)
         if network.ruined:
@@ -100,23 +117,32 @@ def run_destiny(
                 square.global_chaos_pressure,
                 square.fork(0),
                 network.fork(),
+                square.regime.value if square.regime is not None else None,
             )
         )
     advance_shift(square, network, horizon)
 
-    jobs = [
-        (state, surplus, horizon, [[base_seed, t, b] for b in range(branches)])
-        for t, _, _, _, state, surplus in checkpoints
-    ]
-    workers = max(1, min(n_jobs or os.cpu_count() or 4, len(jobs) or 1))
-    if workers == 1:
-        outcomes = [_run_branches(job) for job in jobs]
-    else:
+    def jobs(is_blind: bool) -> list[Any]:
+        return [
+            (state, surplus, horizon, [[base_seed, t, b] for b in range(branches)], is_blind)
+            for t, _, _, _, state, surplus, _ in checkpoints
+        ]
+
+    workers = max(1, min(n_jobs or os.cpu_count() or 4, len(checkpoints) or 1))
+
+    def run(job_list: list[Any]) -> list[list[_Branch]]:
+        if workers == 1:
+            return [_run_branches(job) for job in job_list]
         with ProcessPoolExecutor(max_workers=workers) as executor:
-            outcomes = list(executor.map(_run_branches, jobs))
+            return list(executor.map(_run_branches, job_list))
+
+    outcomes = run(jobs(False))
+    blind_outcomes = run(jobs(True)) if blind and square.regime_process is not None else None
 
     curve = []
-    for (t, surplus_now, d_state, chaos, _, _), futures in zip(checkpoints, outcomes, strict=True):
+    for (t, surplus_now, d_state, chaos, _, _, regime), futures in zip(
+        checkpoints, outcomes, strict=True
+    ):
         survived = sum(1 for ruined, _, _, _ in futures if not ruined)
         low, high = wilson_interval(survived, branches, level)
         drawdowns = [surplus_now - lowest for _, _, lowest, _ in futures]
@@ -125,6 +151,7 @@ def run_destiny(
                 "time": t,
                 "surplus": round(surplus_now, 4),
                 "d_state": d_state,
+                "regime": regime,
                 "chaos_pressure": round(chaos, 4),
                 "destiny": round(survived / branches, 4),
                 "destiny_ci": [round(low, 4), round(high, 4)],
@@ -134,6 +161,13 @@ def run_destiny(
                 "futures_ruined_by_sla": sum(1 for f in futures if f[1] == "sla"),
             }
         )
+
+    if blind_outcomes is not None:
+        for row, futures in zip(curve, blind_outcomes, strict=True):
+            survived = sum(1 for ruined, _, _, _ in futures if not ruined)
+            low, high = wilson_interval(survived, branches, level)
+            row["destiny_blind"] = round(survived / branches, 4)
+            row["destiny_blind_ci"] = [round(low, 4), round(high, 4)]
 
     end_time = network.ruin_time if network.ruined else horizon
     destinies = [float(row["destiny"]) for row in curve]  # type: ignore[arg-type]
@@ -154,26 +188,32 @@ def run_destiny(
         # The curve's known end point: no destiny left at ruin, all of it at the horizon.
         "end": {"time": end_time, "destiny": 0.0 if network.ruined else 1.0},
         "surplus_path": [round(v, 4) for v in network.surplus_path],
+        "regime_path": [snapshot["regime"] for snapshot in square.snapshots],
     }
 
 
-# Dark chart surface and ink; series colours are slots 1 and 2 of a palette
+# Dark chart surface and ink; series colours are slots 1 to 3 of a palette
 # validated for colour-vision deficiency on this surface.
 _SURFACE, _INK, _INK_2, _MUTED, _GRID = "#1a1a19", "#f0efec", "#c3c2b7", "#898781", "#2c2c2a"
-_BLUE, _ORANGE, _CRITICAL = "#3987e5", "#d95926", "#d03b3b"
+_BLUE, _ORANGE, _AQUA, _CRITICAL = "#3987e5", "#d95926", "#199e70", "#d03b3b"
+_REGIME_NAMES = ("stable", "stressed", "disrupted", "chaotic")
+_REGIME_SHADE = (0.0, 0.22, 0.5, 0.85)  # neutral ramp: regime is context, not a series
 
 
 def plot_destiny(result: dict[str, Any], output: str | Path) -> Path:
-    """Draw the destiny curve above the surplus it is explained by, as a PNG.
+    """Draw the destiny curve, the hidden regime, and the surplus, as a PNG.
 
-    Two panels share the time axis rather than two scales sharing one panel:
-    remaining destiny with its confidence band, then surplus against the
-    buffer the shift would need at each checkpoint.
+    Panels share the time axis rather than two scales sharing one panel:
+    remaining destiny with its confidence band (and, when computed, the
+    destiny of a blind observer who does not know the regime), a strip with
+    the hidden regime of the followed shift (darker is worse), then surplus
+    against the buffer the shift would need at each checkpoint.
     """
     import matplotlib
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    from matplotlib.patches import Patch
 
     output_path = Path(output)
     curve = result["curve"]
@@ -182,21 +222,45 @@ def plot_destiny(result: dict[str, Any], output: str | Path) -> Path:
     low = [row["destiny_ci"][0] for row in curve] + [result["end"]["destiny"]]
     high = [row["destiny_ci"][1] for row in curve] + [result["end"]["destiny"]]
     level = round(100 * result["confidence_level"])
+    regimes = [r for r in result.get("regime_path", []) if r is not None]
+    has_blind = bool(curve) and "destiny_blind" in curve[0]
 
-    fig, (top, bottom) = plt.subplots(
-        2, 1, figsize=(9, 6.4), sharex=True, facecolor=_SURFACE, height_ratios=[1, 1]
+    rows = 3 if regimes else 2
+    fig, axes = plt.subplots(
+        rows,
+        1,
+        figsize=(9, 7.0 if regimes else 6.4),
+        sharex=True,
+        facecolor=_SURFACE,
+        height_ratios=[3, 0.45, 2.6] if regimes else [1, 1],
     )
-    for ax in (top, bottom):
+    top, bottom = axes[0], axes[-1]
+    for ax in axes:
         ax.set_facecolor(_SURFACE)
-        ax.grid(axis="y", color=_GRID, linewidth=0.8)
         ax.tick_params(colors=_MUTED, length=0, labelsize=9)
         for side in ("top", "right", "left"):
             ax.spines[side].set_visible(False)
         ax.spines["bottom"].set_color(_GRID)
         ax.set_xlim(0, result["horizon"])
+    for ax in (top, bottom):
+        ax.grid(axis="y", color=_GRID, linewidth=0.8)
 
     top.fill_between(times, low, high, color=_BLUE, alpha=0.18, linewidth=0)
-    top.plot(times, destiny, color=_BLUE, linewidth=2, marker="o", markersize=4)
+    top.plot(
+        times,
+        destiny,
+        color=_BLUE,
+        linewidth=2,
+        marker="o",
+        markersize=4,
+        label="Knowing D's regime",
+    )
+    if has_blind:
+        blind = [row["destiny_blind"] for row in curve] + [result["end"]["destiny"]]
+        top.plot(
+            times, blind, color=_AQUA, linewidth=2, linestyle=(0, (4, 2)), marker="o",
+            markersize=4, label="Not knowing the regime",
+        )  # fmt: skip
     top.set_ylim(-0.03, 1.03)
     top.set_yticks([0, 0.25, 0.5, 0.75, 1.0])
     top.set_yticklabels(["0%", "25%", "50%", "75%", "100%"])
@@ -212,7 +276,34 @@ def plot_destiny(result: dict[str, Any], output: str | Path) -> Path:
         color=_INK,
         fontsize=10,
         loc="left",
+        pad=22 if has_blind else 6,
     )
+    if has_blind:
+        legend = top.legend(
+            loc="lower left", bbox_to_anchor=(0.0, 1.0), ncol=2, frameon=False, fontsize=9,
+            borderpad=0,
+        )  # fmt: skip
+        for text in legend.get_texts():
+            text.set_color(_INK_2)
+
+    if regimes:
+        strip = axes[1]
+        grid = [[_REGIME_NAMES.index(r.lower()) for r in regimes]]
+        shades = [_REGIME_SHADE[i] for i in grid[0]]
+        strip.imshow(
+            [shades], aspect="auto", cmap="gray_r", vmin=0, vmax=1.15,
+            extent=(0, len(regimes), 0, 1), interpolation="nearest",
+        )  # fmt: skip
+        strip.set_yticks([])
+        strip.set_ylabel("regime", color=_MUTED, fontsize=8, rotation=0, ha="right", va="center")
+        strip.legend(
+            handles=[
+                Patch(facecolor=str(1 - (0.12 + 0.88 * s)), edgecolor=_MUTED, label=n)
+                for s, n in zip(_REGIME_SHADE, _REGIME_NAMES, strict=True)
+            ],
+            loc="upper left", bbox_to_anchor=(0.0, -0.1), ncol=4, frameon=False, fontsize=8,
+            labelcolor=_INK_2, handlelength=1.2, borderpad=0,
+        )  # fmt: skip
 
     surplus = result["surplus_path"]
     bottom.plot(range(1, len(surplus) + 1), surplus, color=_BLUE, linewidth=2, label="Surplus")
@@ -234,7 +325,7 @@ def plot_destiny(result: dict[str, Any], output: str | Path) -> Path:
         text.set_color(_INK_2)
 
     if result["ruined"]:
-        for ax in (top, bottom):
+        for ax in axes:
             ax.axvline(result["ruin_time"], color=_CRITICAL, linewidth=1.2, linestyle="--")
         top.annotate(
             "ruin",

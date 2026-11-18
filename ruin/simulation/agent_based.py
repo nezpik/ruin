@@ -8,6 +8,7 @@ from ruin.config import ConfigLike, as_config
 from ruin.core.network import NetworkSurplus
 from ruin.metrics.pressure import DState
 from ruin.state_space.probability_square import QDOT_TYPES, ProbabilitySquare
+from ruin.state_space.regime import REGIMES
 
 
 def make_network(config: ConfigLike) -> NetworkSurplus:
@@ -56,6 +57,14 @@ def advance_shift(
             if stop_at_ruin:
                 break
     return loss_by_type
+
+
+def _occupancy(snapshots: list[dict[str, Any]]) -> dict[str, float] | None:
+    """Share of steps spent in each hidden regime (None when regimes are off)."""
+    path = [snapshot["regime"] for snapshot in snapshots]
+    if not path or path[0] is None:
+        return None
+    return {name.value: round(path.count(name.value) / len(path), 4) for name in REGIMES}
 
 
 def loss_contributions(square: ProbabilitySquare, top: int = 10) -> dict[str, Any]:
@@ -132,6 +141,10 @@ def run_trajectory(
         "surplus_path": network.surplus_path,
         "late_ratio_path": network.late_ratio_path,
         "sla_miss_rate_path": network.sla_miss_rate_path,
+        "regime_path": [snapshot["regime"] for snapshot in square.snapshots],
+        "regime_occupancy": _occupancy(square.snapshots),
+        "shock_count_path": [snapshot["shock_count"] for snapshot in square.snapshots],
+        "field_retention_path": [snapshot["field_retention"] for snapshot in square.snapshots],
         "d_state_path": [snapshot["d_state"] for snapshot in square.snapshots],
         "chaos_pressure_path": [snapshot["chaos_pressure"] for snapshot in square.snapshots],
         "order_pressure_path": [snapshot["order_pressure"] for snapshot in square.snapshots],

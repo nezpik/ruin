@@ -53,7 +53,11 @@ RUIN_VOCABULARY_GLOSSARY = """\
   abandoned (failed).
 - **Disruption Propagation Field**: spatial memory of shocks that intensifies,
   spreads to nearby cells, decays over time, and recovers.
-- **D-state**: the grid's regime — one of STABLE, STRESSED, DISRUPTED,
+- **Regime**: some scenarios give D a hidden regime (STABLE, STRESSED,
+  DISRUPTED, CHAOTIC) that generates disruption in persistent bursts and is
+  pulled by D's own pressures. The regime is what D is doing; the D-state is
+  what the pressures say it is doing, so the two can disagree.
+- **D-state**: the grid's observed regime — one of STABLE, STRESSED, DISRUPTED,
   CHAOTIC, RECOVERING, or RUINED — driven by the balance of chaos pressure
   and order pressure.
 - **chaos_pressure**: a global measure of how strongly disruption, congestion
@@ -197,6 +201,13 @@ def _build_trajectory_facts(result: dict[str, Any], config: ConfigLike) -> str:
         )
     )
     transitions = _summarize_d_state_transitions(result.get("d_state_path", []))
+    regimes = [r for r in result.get("regime_path", []) if r is not None]
+    if regimes:
+        transitions += (
+            "\n\n## Hidden regime sequence (run-length encoded)\n"
+            f"{_summarize_d_state_transitions(regimes)}\n"
+            f"occupancy={result.get('regime_occupancy')}"
+        )
 
     return (
         f"## Scenario configuration\n{_build_config_summary(config)}\n\n"
@@ -247,6 +258,7 @@ def _build_risk_facts(result: dict[str, Any], config: ConfigLike) -> str:
         f"losses cover the whole shift (paths run on after ruin); "
         f"loss_share_by_type={result.get('loss_share_by_type')} "
         f"mean_min_surplus={result.get('mean_min_surplus')}\n"
+        f"mean_regime_occupancy={result.get('mean_regime_occupancy')}\n"
         f"expected_shortfall_by_type={result.get('expected_shortfall_by_type')} "
         f"share_of_qdots_with_loss={result.get('share_of_qdots_with_loss')} "
         f"loss_share_of_top_1pct_qdots={result.get('loss_share_of_top_1pct_qdots')}\n"

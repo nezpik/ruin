@@ -107,7 +107,7 @@ def test_scale_parameters_scales_and_revalidates(golden_ruin_config):
         assert getattr(scaled.qdots, name).time_window == pytest.approx(
             0.5 * getattr(base.qdots, name).time_window
         )
-    assert base.disruption_field.shock_arrival_rate == 0.72  # original untouched
+    assert base.disruption_field.shock_arrival_rate == 0.693  # original untouched
     with pytest.raises(Exception, match=r"never decay|memory_weight|less than or equal"):
         scale_parameters(base, {"disruption_field.memory_weight": 5.0})
 

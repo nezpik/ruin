@@ -71,17 +71,24 @@ def sample_shock_events(
     height: int,
     dt: float = 1.0,
     rng: np.random.Generator | None = None,
+    size_sigma: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Sample this step's disruption shocks for the whole grid.
 
     The number of shocks is Poisson(rate * dt); each lands on a uniformly
-    random cell with exponential intensity. Returns (xs, ys, intensities).
+    random cell. Sizes are exponential, or with `size_sigma` > 0 lognormal
+    with the same mean (heavier tailed: rare shocks are far larger than
+    typical ones). Returns (xs, ys, intensities).
     """
     rng = rng or make_rng()
     k = int(rng.poisson(max(0.0, rate * dt)))
     xs = rng.integers(0, width, size=k)
     ys = rng.integers(0, height, size=k)
-    intensities = rng.exponential(scale=max(mean_intensity, 0.0), size=k)
+    mean = max(mean_intensity, 0.0)
+    if size_sigma > 0 and mean > 0:
+        intensities = rng.lognormal(math.log(mean) - size_sigma**2 / 2.0, size_sigma, size=k)
+    else:
+        intensities = rng.exponential(scale=mean, size=k)
     return xs, ys, intensities
 
 
