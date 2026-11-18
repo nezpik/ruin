@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from ruin.config import load_ruin_config
 from ruin.config_models import RuinConfig
+from ruin.inference.observer import evaluate_observer, fit_regime_observer
 from ruin.risk.classical import validate_against_cramer_lundberg
 from ruin.risk.destiny import plot_destiny, run_destiny
 from ruin.risk.ruin_probability import run_monte_carlo
@@ -99,6 +100,16 @@ def build_parser() -> argparse.ArgumentParser:
     destiny.add_argument("--jobs", type=int, default=None)
     destiny.add_argument("--plot", metavar="PATH", default=None, help="Write the curve as a PNG")
     destiny.add_argument(
+        "--observer",
+        action="store_true",
+        help="Also estimate destiny for an observer who sees the pressures (fits a filter first)",
+    )
+    destiny.add_argument(
+        "--incidents",
+        action="store_true",
+        help="With --observer: give the observer an incident feed (shock counts)",
+    )
+    destiny.add_argument(
         "--blind",
         action="store_true",
         help="Also estimate destiny for a viewer who does not know D's hidden regime",
@@ -142,6 +153,15 @@ def build_parser() -> argparse.ArgumentParser:
     structure.add_argument("--config", required=True)
     structure.add_argument("--paths", type=int, default=300)
     structure.add_argument("--jobs", type=int, default=None)
+
+    watch = subparsers.add_parser(
+        "observer",
+        help="Fit a regime observer and score it against the true regime on held-out shifts",
+    )
+    watch.add_argument("--config", required=True)
+    watch.add_argument("--fit-shifts", type=int, default=150, help="Shifts used to fit the model")
+    watch.add_argument("--eval-shifts", type=int, default=80, help="Held-out shifts to score on")
+    watch.add_argument("--jobs", type=int, default=None)
 
     validate = subparsers.add_parser(
         "validate",
@@ -228,6 +248,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "destiny":
+        observer = None
+        if args.observer:
+            try:
+                observer = fit_regime_observer(config, n_jobs=args.jobs)
+            except ValueError as exc:
+                logger.error("%s", exc)
+                return 2
         result = run_destiny(
             config,
             seed=args.seed,
@@ -236,12 +263,24 @@ def main(argv: list[str] | None = None) -> int:
             max_steps=args.max_steps,
             n_jobs=args.jobs,
             blind=args.blind,
+            observer=observer,
+            observer_incidents=args.incidents,
         )
         if args.plot:
             logger.info("Destiny curve written to %s", plot_destiny(result, args.plot))
         result.pop("surplus_path")
         result.pop("regime_path")
         logger.info(json.dumps(result, indent=2))
+        return 0
+
+    if args.command == "observer":
+        try:
+            fitted = fit_regime_observer(config, shifts=args.fit_shifts, n_jobs=args.jobs)
+        except ValueError as exc:
+            logger.error("%s", exc)
+            return 2
+        report = evaluate_observer(config, fitted, shifts=args.eval_shifts, n_jobs=args.jobs)
+        logger.info(json.dumps(report, indent=2))
         return 0
 
     if args.command == "facts":

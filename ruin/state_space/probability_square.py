@@ -137,13 +137,21 @@ class ProbabilitySquare:
         if self.regime_process is not None:
             self.regime_level = self.regime_process.initial_level(self.rng)
 
-    def forget_regime(self) -> None:
-        """Replace the hidden regime with a draw from its long-run mix.
+    def redraw_regime(self, probabilities: np.ndarray) -> None:
+        """Replace the hidden regime with a draw from `probabilities` (one per level).
 
         Used to ask what the future looks like to someone who knows the whole
-        state of D except which regime it is in."""
+        state of D except which regime it is in, and who holds those beliefs
+        about it."""
         if self.regime_process is not None:
-            self.regime_level = self.regime_process.stationary_level(self.rng)
+            p = np.asarray(probabilities, dtype=float)
+            self.regime_level = int(self.rng.choice(4, p=p / p.sum()))
+
+    def forget_regime(self) -> None:
+        """Redraw the hidden regime from its long-run mix: someone who knows
+        nothing about which regime D is in."""
+        if self.regime_process is not None:
+            self.redraw_regime(np.asarray(self.regime_process.config.stationary()))
 
     @property
     def regime(self) -> Regime | None:
