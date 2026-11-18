@@ -7,7 +7,7 @@ authors:
     given-names: Naji
 repository-code: "https://github.com/nezpik/ruin"
 url: "https://github.com/nezpik/ruin"
-version: "0.9.0"
+version: "0.9.1"
 date-released: "2026-05-10"
 abstract: "RUIN is a destiny-framed ruin-risk framework for logistics uncertainty, modeling Q dots moving through a bounded D grid with disruption propagation, chaotic organization, surplus depletion, and finite-time ruin probability."
 keywords:

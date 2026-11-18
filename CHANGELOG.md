@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.1] - 2026-11
+
+### Fixed
+
+- **A circular import broke the engine when it was imported first.** `ruin.analysis`
+  eagerly imported its report module, which imports the engine, which imports
+  `ruin.analysis` for the recorder. Importing `ruin.simulation.agent_based`,
+  `ruin.state_space.probability_square`, `ruin.risk.destiny` or
+  `ruin.inference.observer` as the first import in a fresh interpreter failed with an
+  `ImportError`. The command line and the test suite happened to import
+  `ruin.analysis` first, so neither saw it; it shipped in 0.9.0. The report module is
+  now loaded lazily on first use, and a new test imports every module of the package
+  in its own interpreter (it fails on the 0.9.0 code).
+
+### Added
+
+- `paper/`: a four-page, two-column paper in LaTeX (`paper/ruin.pdf`) that explains
+  the project in plain language, with its main formulas, results, limits and future
+  work. `paper/make_figures.py` draws its figures from the engine and from cached
+  analysis results in `paper/data/`; `make -C paper` rebuilds everything.
+
+---
+
 ## [0.9.0] - 2026-11
 
 **Chaotic organization**: the structure that forms when Q dots try to keep

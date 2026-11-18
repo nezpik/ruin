@@ -4,13 +4,15 @@
 
 [![Python](https://img.shields.io/badge/Python-3.11--3.14-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![v0.9.0](https://img.shields.io/badge/Version-v0.9.0-green.svg)](https://github.com/nezpik/ruin)
+[![v0.9.1](https://img.shields.io/badge/Version-v0.9.1-green.svg)](https://github.com/nezpik/ruin)
 
 RUIN is a research-grade framework for measuring when physical logistics systems run out of destiny. It translates quantitative finance concepts (ruin theory, jump-diffusion, Monte Carlo paths, VaR, Expected Shortfall, bootstrap confidence intervals) into a logistics language built around **physical uncertainty**, **service failure**, and **systemic collapse**.
 
 The central object is the **Probability Square** — an abstract two-dimensional **destiny frame `D`** inside which many **Q dots** (delivery commitments, route obligations, flow units) move through possible futures.
 
 RUIN does not try to predict the future perfectly. It gives chaos a bounded frame so that uncertainty can move, organize, propagate, and become measurable.
+
+A short, plain-language paper that explains the ideas, the main formulas, and the results is in [`paper/ruin.pdf`](paper/ruin.pdf) (four pages; source and figure scripts in [`paper/`](paper/)).
 
 ---
 
@@ -422,7 +424,7 @@ Full definitions and deeper philosophy are in `RUIN.md`.
 
 ---
 
-## Current Architecture (v0.9.0)
+## Current Architecture (v0.9.1)
 
 ```
 ruin/
@@ -491,12 +493,16 @@ These are explicitly deferred until the abstract mechanics are solid and reprodu
 
 **Done in v0.7 (a regime-driven D):** a hidden regime of D that generates disruption in persistent, heavy-tailed bursts and is pulled by D's own pressures; load-dependent persistence of disruption; destiny with and without knowledge of the regime; a stylized-facts suite (`ruin facts`) that the memoryless model fails; a structure ensemble (`ruin structure`) at equal mean disruption.
 
-**Next (chaotic organization and hedging):**
-- Detection of clusters, corridors, and ruin zones; shock attribution by `shock_types`
-- A posterior over the hidden regime: an observer between "knows the regime" and "does not", from the D-state history
-- Congestion that slows travel (density-dependent speed), which today only affects pressure and persistence
+**Done in v0.8 (the observer):** a calibrated Bayes filter over the hidden regime, with an incident-feed variant, scored against ground truth (`ruin observer`), and a third destiny view (`ruin destiny --observer`).
+
+**Done in v0.9 (chaotic organization):** jams tracked from birth to death, Q-dot pile-up, flow beside jams, corridors, pressure zones, recovery, and ruin zones (`ruin organize`); exact attribution of delay by origin; an opt-in steering lever (`processes.avoidance`).
+
+**Next (hedging and topology):**
+- A policy layer: buffers, backup capacity, and rerouting compared by ruin probability reduced per unit cost, evaluated through the observer and across structures of disruption
+- Real topology (road graphs, depots), so that corridors and persistent hot spots can exist
 - Deadlines that depend on trip length: today a fixed promise makes long trips carry almost all the risk
-- A policy layer: buffers, backup capacity, and rerouting compared by ruin probability reduced per unit cost
+- Congestion that slows travel (density-dependent speed), which today only affects pressure and persistence
+- `shock_types` with real mechanics (they are still reserved, and unused)
 
 **Later (when the abstract core is trusted):**
 - Real road graphs and spatial topologies
@@ -527,7 +533,7 @@ If you use RUIN, its concepts, terminology, code, or experimental outputs in aca
 
 Suggested citation:
 
-> Zouiti, Naji. RUIN: Ruin-probability Unified In Networks. v0.9.0, 2026.  
+> Zouiti, Naji. RUIN: Ruin-probability Unified In Networks. v0.9.1, 2026.  
 > GitHub: https://github.com/nezpik/ruin
 
 BibTeX:
@@ -537,7 +543,7 @@ BibTeX:
   author = {Zouiti, Naji},
   title = {RUIN: Ruin-probability Unified In Networks},
   year = {2026},
-  version = {0.9.0},
+  version = {0.9.1},
   url = {https://github.com/nezpik/ruin}
 }
 ```
