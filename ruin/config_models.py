@@ -72,6 +72,11 @@ class ProcessesConfig(BaseModel):
     jump_intensity: float = Field(ge=0)
     jump_mean_size: float = Field(ge=0)
     jump_size_distribution: Literal["exponential"] = "exponential"
+    # Local rerouting: a Q dot choosing between its two forward moves (along x or
+    # along y) weights each by exp(-avoidance * how blocked the next cell on that
+    # axis is). 0 is no avoidance (axes are chosen at random in proportion to the
+    # distance left on each); larger values steer around blocked cells.
+    avoidance: float = Field(default=0.0, ge=0)
 
 
 class DStateThresholds(BaseModel):
@@ -276,6 +281,8 @@ class VisualizationConfig(BaseModel):
     show_qdot_types: bool = True
     show_ruin_event: bool = True
     show_disruption_field: bool = True
+    # Outline the jams (regions blocked at least half) on the heatmap.
+    show_jams: bool = True
     show_d_state: bool = True
     show_order_chaos_pressure: bool = True
     heatmap_field: Literal[

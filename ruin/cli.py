@@ -9,6 +9,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from ruin.analysis import StructureRecorder, plot_organization, run_organization
 from ruin.config import load_ruin_config
 from ruin.config_models import RuinConfig
 from ruin.inference.observer import evaluate_observer, fit_regime_observer
@@ -154,6 +155,27 @@ def build_parser() -> argparse.ArgumentParser:
     structure.add_argument("--paths", type=int, default=300)
     structure.add_argument("--jobs", type=int, default=None)
 
+    organize = subparsers.add_parser(
+        "organize",
+        help="Measure the structure that forms in D: jams, pile-up, corridors, zones, recovery",
+    )
+    organize.add_argument("--config", required=True)
+    organize.add_argument("--shifts", type=int, default=60)
+    organize.add_argument(
+        "--avoidance",
+        type=float,
+        default=None,
+        help="Override processes.avoidance (how strongly Q dots steer around blocked cells)",
+    )
+    organize.add_argument("--seed", type=int, default=None, help="With --plot: the shift to draw")
+    organize.add_argument(
+        "--plot",
+        metavar="PATH",
+        default=None,
+        help="Draw one shift as a PNG instead of aggregating",
+    )
+    organize.add_argument("--jobs", type=int, default=None)
+
     watch = subparsers.add_parser(
         "observer",
         help="Fit a regime observer and score it against the true regime on held-out shifts",
@@ -271,6 +293,30 @@ def main(argv: list[str] | None = None) -> int:
         result.pop("surplus_path")
         result.pop("regime_path")
         logger.info(json.dumps(result, indent=2))
+        return 0
+
+    if args.command == "organize":
+        if args.avoidance is not None:
+            config = config.model_copy(deep=True)
+            config.processes.avoidance = args.avoidance
+        if args.plot:
+            recorder = StructureRecorder()
+            result = run_trajectory(
+                config,
+                seed=args.seed,
+                stop_at_ruin=False,
+                store_qdot_snapshots=False,
+                recorder=recorder,
+                attribute_sources=True,
+            )
+            logger.info(
+                "Organization chart written to %s", plot_organization(result, recorder, args.plot)
+            )
+            logger.info(json.dumps(result["structure"], indent=2, default=str))
+            return 0
+        logger.info(
+            json.dumps(run_organization(config, shifts=args.shifts, n_jobs=args.jobs), indent=2)
+        )
         return 0
 
     if args.command == "observer":

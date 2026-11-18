@@ -4,6 +4,7 @@ from typing import Any
 
 import numpy as np
 
+from ruin.analysis.organization import StructureRecorder
 from ruin.config import ConfigLike, as_config
 from ruin.core.network import NetworkSurplus
 from ruin.metrics.pressure import DState
@@ -54,9 +55,38 @@ def advance_shift(
         if network.ruined and not was_ruined:
             square.d_state = DState.RUINED
             snapshot["d_state"] = DState.RUINED.value
+            if square.recorder is not None:
+                square.recorder.mark_ruin(square.time)
             if stop_at_ruin:
                 break
     return loss_by_type
+
+
+def _by_name(names: list[str], values: list[float] | None) -> dict[str, float] | None:
+    if values is None:
+        return None
+    return {name: round(v, 6) for name, v in zip(names, values, strict=True)}
+
+
+def _delay_attribution(square: ProbabilitySquare) -> dict[str, Any] | None:
+    """Field-induced delay (dot-steps) by origin of the disruption, when tracked."""
+    if square.sources is None:
+        return None
+    total = square.delay_total
+    return {
+        "total_delay_steps": round(total, 3),
+        "by_source": {
+            name: round(v, 3)
+            for name, v in zip(square.source_names, square.delay_by_source, strict=True)
+        },
+        "share_by_source": {
+            name: round(v / total, 4) if total > 0 else 0.0
+            for name, v in zip(square.source_names, square.delay_by_source, strict=True)
+        },
+        "unattributed_share": max(0.0, round(1.0 - sum(square.delay_by_source) / total, 4))
+        if total > 0
+        else 0.0,
+    }
 
 
 def _occupancy(snapshots: list[dict[str, Any]]) -> dict[str, float] | None:
@@ -97,6 +127,8 @@ def run_trajectory(
     store_field_snapshots: bool = False,
     store_qdot_snapshots: bool = True,
     stop_at_ruin: bool = True,
+    recorder: StructureRecorder | None = None,
+    attribute_sources: bool = False,
 ) -> dict[str, Any]:
     """Run one destiny: a single shift.
 
@@ -113,8 +145,12 @@ def run_trajectory(
         seed,
         store_field_snapshots=store_field_snapshots,
         store_qdot_snapshots=store_qdot_snapshots,
+        recorder=recorder,
+        attribute_sources=attribute_sources,
     )
     network = make_network(cfg)
+    if recorder is not None:
+        recorder.set_horizon(horizon)
     loss_by_type = advance_shift(square, network, horizon, stop_at_ruin=stop_at_ruin)
 
     terminated = square.delivered + square.delivered_late + square.failed
@@ -136,6 +172,9 @@ def run_trajectory(
         "delivered_late": square.delivered_late,
         "failed": square.failed,
         "on_time_rate": round(square.delivered / terminated, 6) if terminated else None,
+        "loss_by_regime": _by_name([r.value for r in REGIMES], square.loss_by_regime),
+        "delay_by_source": _delay_attribution(square),
+        "structure": recorder.summary() if recorder is not None else None,
         **loss_contributions(square),
         "loss_field": np.round(square.loss_field.reshape(square.height, square.width), 4).tolist(),
         "surplus_path": network.surplus_path,

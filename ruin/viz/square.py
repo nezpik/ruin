@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.animation import FuncAnimation, PillowWriter
 
+from ruin.analysis.organization import JAM_THRESHOLD, MIN_JAM_AREA, label_components
 from ruin.config import ConfigLike, as_config
 from ruin.core.processes import EXPOSURE_SATURATION
 
@@ -140,6 +141,11 @@ def animate_probability_square(
         colorbar.ax.tick_params(colors="#888888")
 
     scatter = ax.scatter([], [], s=22, edgecolors="#222222", linewidths=0.4)
+    outlines: list[Any] = []  # the jam outlines drawn for the current frame
+    jam_text = ax.text(
+        0.98, 0.02, "", transform=ax.transAxes, color="white", fontsize=9, va="bottom", ha="right",
+        fontfamily="monospace",
+    )  # fmt: skip
 
     text_kw: dict[str, Any] = {"transform": ax.transAxes, "fontfamily": "monospace"}
     time_text = ax.text(0.02, 0.98, "", color="white", fontsize=10, va="top", **text_kw)
@@ -166,13 +172,25 @@ def animate_probability_square(
         fontweight="bold",
         **text_kw,
     )
-    artists = (field_img, scatter, time_text, state_text, pressure_text, ruin_text)
+    artists = (field_img, scatter, time_text, state_text, pressure_text, ruin_text, jam_text)
 
     def update(frame_idx: int) -> tuple[Any, ...]:
         snap = frames[frame_idx]
 
         if show_heatmap and heat_key in snap:
             field_img.set_data(np.array(snap[heat_key], dtype=float))
+        for outline in outlines:
+            outline.remove()
+        outlines.clear()
+        if viz.show_jams and "field" in snap:
+            blocked = np.array(snap["field"], dtype=float) >= JAM_THRESHOLD
+            if blocked.any() and not blocked.all():
+                outlines.append(
+                    ax.contour(blocked.astype(float), levels=[0.5], colors="white", linewidths=0.8)
+                )
+            labels, count = label_components(blocked)
+            jams = sum(1 for k in range(1, count + 1) if (labels == k).sum() >= MIN_JAM_AREA)
+            jam_text.set_text(f"jams: {jams}")
 
         qdots = snap.get("qdots", [])
         if qdots:

@@ -120,6 +120,9 @@ def batch_qdot_travel_step(
     jump_mean_size: float,
     rng: np.random.Generator,
     dt: float = 1.0,
+    avoidance: float = 0.0,
+    ahead_x: np.ndarray | None = None,
+    ahead_y: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Move many Q dots one step toward their destinations.
 
@@ -129,6 +132,11 @@ def batch_qdot_travel_step(
     the next step. Dots move along the grid (Manhattan paths), splitting
     their steps between the two axes at random in proportion to the distance
     left on each, so they can never leave the destiny frame.
+
+    With `avoidance` > 0 and the disruption intensity `ahead_x` / `ahead_y` of
+    the next cell on each axis, a dot weights each axis by exp(-avoidance *
+    blocked fraction of that cell): it steers around blocked cells when it can
+    and still goes through when both ways are blocked or only one axis is left.
 
     Returns (new_x, new_y, new_carry, moved, arrived).
     """
@@ -149,7 +157,13 @@ def batch_qdot_travel_step(
     steps = np.minimum(np.floor(progress).astype(int), remaining)
     new_carry = progress - np.floor(progress)
 
-    share_x = np.divide(rem_x, remaining, out=np.zeros(n, dtype=float), where=remaining > 0)
+    if avoidance > 0 and ahead_x is not None and ahead_y is not None:
+        weight_x = rem_x * np.exp(-avoidance * blocked_fraction(ahead_x))
+        weight_y = rem_y * np.exp(-avoidance * blocked_fraction(ahead_y))
+        both = weight_x + weight_y
+        share_x = np.divide(weight_x, both, out=np.zeros(n, dtype=float), where=both > 0)
+    else:
+        share_x = np.divide(rem_x, remaining, out=np.zeros(n, dtype=float), where=remaining > 0)
     steps_x = np.minimum(rng.binomial(steps, share_x), rem_x)
     steps_y = np.minimum(steps - steps_x, rem_y)
     steps_x = np.minimum(steps - steps_y, rem_x)

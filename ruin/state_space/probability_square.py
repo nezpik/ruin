@@ -5,10 +5,12 @@ from typing import Any
 
 import numpy as np
 
+from ruin.analysis.organization import StepFields, StructureRecorder
 from ruin.config import ConfigLike, as_config
 from ruin.core.processes import (
     batch_qdot_travel_step,
     blocked_fraction,
+    field_drag,
     make_rng,
     sample_shock_events,
 )
@@ -49,6 +51,8 @@ class ProbabilitySquare:
         seed: int | None = None,
         store_field_snapshots: bool = False,
         store_qdot_snapshots: bool = True,
+        recorder: StructureRecorder | None = None,
+        attribute_sources: bool = False,
     ) -> None:
         cfg = as_config(config)
         self.config = cfg
@@ -71,21 +75,39 @@ class ProbabilitySquare:
             else None
         )
         self.regime_level = 0
+        self.recorder = recorder
+        # Where loss accrued while D was in each regime (None when regimes are off).
+        self.loss_by_regime = [0.0] * 4 if square.regime.enabled else None
         # Per-cell memory of where Q dots have recently stalled, in [0, 1].
         self.congestion = np.zeros(self.width * self.height, dtype=float)
 
         field_cfg = cfg.disruption_field
-        self.field = DisruptionField(
-            self.width,
-            self.height,
-            field_cfg.memory_weight,
-            field_cfg.propagation_radius,
-            field_cfg.propagation_decay,
-            field_cfg.temporal_decay,
-            field_cfg.recovery_rate,
-            field_cfg.propagation_share,
-            square.boundary_mode,
-        )
+
+        def new_field() -> DisruptionField:
+            return DisruptionField(
+                self.width,
+                self.height,
+                field_cfg.memory_weight,
+                field_cfg.propagation_radius,
+                field_cfg.propagation_decay,
+                field_cfg.temporal_decay,
+                field_cfg.recovery_rate,
+                field_cfg.propagation_share,
+                square.boundary_mode,
+            )
+
+        self.field = new_field()
+        # Attribution: one extra field per origin of disruption (each regime level, or a
+        # single exogenous source without regimes, plus feedback from late Q dots). The
+        # field dynamics are linear, so the origins always add up to `self.field`.
+        self.source_names: list[str] = []
+        self.sources: list[DisruptionField] | None = None
+        if attribute_sources:
+            exogenous = [r.value for r in REGIMES] if square.regime.enabled else ["EXOGENOUS"]
+            self.source_names = [*exogenous, "FEEDBACK"]
+            self.sources = [new_field() for _ in self.source_names]
+        self.delay_by_source = [0.0] * len(self.source_names)
+        self.delay_total = 0.0
 
         qdots = cfg.qdots
         params = (qdots.standard, qdots.express, qdots.bulky)
@@ -235,6 +257,14 @@ class ProbabilitySquare:
             setattr(other, name, getattr(self, name).copy())
         other.field = copy.copy(self.field)
         other.field.grid = self.field.grid.copy()
+        other.recorder = None
+        if self.sources is not None:
+            other.sources = [copy.copy(src) for src in self.sources]
+            for src, mine in zip(other.sources, self.sources, strict=True):
+                src.grid = mine.grid.copy()
+            other.delay_by_source = list(self.delay_by_source)
+        if self.loss_by_regime is not None:
+            other.loss_by_regime = list(self.loss_by_regime)
         other.congestion = self.congestion.copy()
         other.loss_field = self.loss_field.copy()
         other.snapshots = []
@@ -305,6 +335,22 @@ class ProbabilitySquare:
             )
         return records
 
+    def _attribute_delay(self) -> None:
+        """Split this step's field-induced delay among the origins of disruption.
+
+        A Q dot in a cell loses the fraction `1 - drag` of the step to the field. That
+        delay is shared among the origins in proportion to each origin's share of the
+        intensity in the dot's cell (base risk, which has no origin, is left out), and
+        accumulated as delay-steps."""
+        assert self.sources is not None
+        multiplier = self.config.disruption_field.qdot_exposure_multiplier
+        delay = 1.0 - field_drag(self._exposure)
+        exposure = np.maximum(self._exposure, 1e-12)
+        self.delay_total += float(delay.sum())
+        for k, source in enumerate(self.sources):
+            share = source.exposure_at(self._x, self._y) * multiplier / exposure
+            self.delay_by_source[k] += float((delay * share).sum())
+
     def _cell_counts(self, mask: np.ndarray) -> np.ndarray:
         cells = self._y[mask] * self.width + self._x[mask]
         return np.bincount(cells, minlength=self.width * self.height)
@@ -348,6 +394,10 @@ class ProbabilitySquare:
                 size_sigma=field_cfg.shock_size_sigma,
             )
             self.field.inject_many(xs, ys, intensities)
+            if self.sources is not None:
+                self.sources[
+                    self.regime_level if self.regime_process is not None else 0
+                ].inject_many(xs, ys, intensities)
             shock_count, shock_mass = len(xs), float(intensities.sum())
 
         # 2. The field spreads and decays; where Q dots are stalled it lingers.
@@ -358,12 +408,23 @@ class ProbabilitySquare:
             gain_map = base + field_cfg.congestion_persistence * load * (field_cfg.max_gain - base)
         field_retention = self.field.retention(gain_map)
         self.field.step(gain_map)
+        if self.sources is not None:
+            for source in self.sources:
+                source.step(gain_map)
 
         # 3. Q dots move toward their destinations through the field.
         self._exposure = (
             self.field.exposure_at(self._x, self._y) + self.base_risk
         ) * field_cfg.qdot_exposure_multiplier
         was_late = self._late.copy()
+        if self.sources is not None and len(self._x):
+            self._attribute_delay()
+        ahead_x = ahead_y = None
+        if proc.avoidance > 0 and len(self._x):
+            step_x = np.clip(self._x + np.sign(self._dest_x - self._x), 0, self.width - 1)
+            step_y = np.clip(self._y + np.sign(self._dest_y - self._y), 0, self.height - 1)
+            ahead_x = self.field.exposure_at(step_x, self._y)
+            ahead_y = self.field.exposure_at(self._x, step_y)
         self._x, self._y, self._carry, moved, arrived = batch_qdot_travel_step(
             self._x,
             self._y,
@@ -379,6 +440,9 @@ class ProbabilitySquare:
             proc.jump_mean_size,
             self.rng,
             dt=dt,
+            avoidance=proc.avoidance,
+            ahead_x=ahead_x,
+            ahead_y=ahead_y,
         )
 
         # 4. Time windows run down; on-time arrivals earn, late dots cost.
@@ -399,12 +463,23 @@ class ProbabilitySquare:
         )
         penalty = float(accrued.sum())
         self._cost[accruing] += accrued
-        np.add.at(self.loss_field, self._y[accruing] * self.width + self._x[accruing], accrued)
+        accrued_cells = np.bincount(
+            self._y[accruing] * self.width + self._x[accruing],
+            weights=accrued,
+            minlength=self.width * self.height,
+        )
+        self.loss_field += accrued_cells
+        if self.loss_by_regime is not None:
+            self.loss_by_regime[self.regime_level] += penalty
         penalty_by_type = np.bincount(self._type[accruing], weights=accrued, minlength=3)
 
         # 5. Q dots reshape D: lateness and failure add local disruption.
         feedback = newly_late | failed
         self.field.inject_many(self._x[feedback], self._y[feedback], self.qdot_feedback_weight)
+        if self.sources is not None:
+            self.sources[-1].inject_many(
+                self._x[feedback], self._y[feedback], self.qdot_feedback_weight
+            )
 
         # 6. Pressures and D-state, over the Q dots still travelling.
         in_flight = travelling & ~failed
@@ -481,6 +556,19 @@ class ProbabilitySquare:
                 snapshot["order_field"] = local_order.reshape(shape).tolist()
                 snapshot["loss_field"] = np.round(self.loss_field.reshape(shape), 4).tolist()
         self.snapshots.append(snapshot)
+        if self.recorder is not None:
+            self.recorder.observe(
+                StepFields(
+                    time=self.time,
+                    regime=self.regime.value if self.regime is not None else None,
+                    intensity=self.field.grid,
+                    density=active_cells.reshape(self.height, self.width),
+                    flow=moving_cells.reshape(self.height, self.width),
+                    chaos=local_chaos.reshape(self.height, self.width),
+                    accrued=accrued_cells.reshape(self.height, self.width),
+                    loss=self.loss_field.reshape(self.height, self.width),
+                )
+            )
 
         leaving = ~in_flight
         if leaving.any():
