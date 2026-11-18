@@ -14,6 +14,8 @@ RUIN does not try to predict the future perfectly. It gives chaos a bounded fram
 
 A short, plain-language paper that explains the ideas, the main formulas, and the results is in [`paper/ruin.pdf`](paper/ruin.pdf) (four pages; source and figure scripts in [`paper/`](paper/)).
 
+What RUIN may add to existing work, and how it treats destiny as something a logistician can sense through repeated days (the Instinct), are set out in [`RUIN.md`](RUIN.md).
+
 ---
 
 ## Core Philosophy

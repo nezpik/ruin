@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **`RUIN.md`: "What May Be Different" and "Destiny and the Instinct".** The first states
+  honestly that RUIN is mostly a recombination of known pieces (ruin theory, Markov
+  disruption models, stress tests, Markov-modulated risk) and lists six things that may be
+  different, each with what would show it wrong. The second expands the concept of
+  destiny: the linear, repeated, optimised day; destiny as what the plan cannot see; `D` as a
+  fourth dimension (which day), so that trouble can be read as distance from the routine
+  (`Inst`); how `Inst` relates to remaining destiny and the observer; and a prediction that
+  optimising a repeated operation makes days calmer while moving it closer to ruin.
+- **`experiments/instinct.py`**: a first exploratory test of `Inst`. Over 600 new days
+  (100 ruined), a person watching late ratio, field and chaos pressure against the routine
+  of 600 lived days is flagged about 50 steps before ruin against 22 for the board, at a 10%
+  false-alarm rate. Most of that comes from watching several channels; the learned routine
+  adds a small amount (not tested for significance), because the model has no daily rhythm.
+- `Instinct (Inst)` entry in the core vocabulary.
+
+---
+
 ## [0.9.1] - 2026-11
 
 ### Fixed

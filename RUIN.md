@@ -106,6 +106,10 @@ The regime and the pressures **co-evolve**. Late deliveries raise chaos pressure
 
 This is a hypothesis about how logistics systems behave, not an established fact, and it is tested rather than assumed: `ruin facts` checks that a scenario reproduces eight qualitative regularities (clustering, persistence, heavy-tailed shifts and trips, good days and bad days, the flaw of averages, partial observability, and co-evolution), and `ruin structure` shows how much a ruin probability depends on the shape of disruption at equal mean.
 
+### Instinct (`Inst`)
+
+`Inst` is the felt sense that today is not the usual day. It is computed as how far what is happening now sits from the routine, the typical value at this point of the shift over the days already lived, in units of how much those days normally differ. It is a cheap, model-free stand-in for what the observer computes exactly, and it is the human-facing reading of `D`. See [Destiny and the Instinct](#destiny-and-the-instinct).
+
 ### Surplus process
 
 The system surplus is the remaining operational buffer after disruptions and penalties are absorbed.
@@ -357,6 +361,111 @@ retention(cell) = gain + congestion_persistence * congestion(cell) * (max_gain -
 - **Chaotic organization patterns**: clusters, forced corridors, pressure zones, recovery pockets, and ruin zones.
 - **Absorption vs cascade summary**: which shocks were absorbed by surplus and which contributed to ruin.
 - **Probability Square frames**: visual state of the destiny grid through time.
+
+---
+
+## What May Be Different
+
+RUIN is mostly a recombination, and it should be read that way. Ruin theory is a century old. Disruption simulation, Markov models of supplier disruption and ripple effects (for example Hosseini, Ivanov and Dolgui, 2019), stress tests with a time-to-survive metric (the MIT and Accenture supply chain stress test), and Markov-modulated risk processes in actuarial ruin theory all exist. A critical review of disruption models ([Bugert and Lasch, 2018](https://www.bvl.de/lore/all-volumes--issues/volume-11/issue-1/supply-chain-disruption-models-a-critical-review)) is the best single map of what is already covered. Only a small part of that literature has been checked, so everything below is a claim about what looks different, not a finding that nobody has done it.
+
+Six things may be different. For each, what would show it is wrong.
+
+1. **Ruin with two doors, in a space where the disruption and the work feed each other.** A shift is ruined when its buffer is spent or when its promise to customers breaks (the rolling miss rate), whichever comes first, in a model where late work lengthens the disruption that makes more work late. The answer is a probability with a tail and an interval, not a scenario. *Wrong if* an existing tool already gives the same answers from the same inputs.
+2. **Remaining destiny, with three ways of looking.** `Δ(t)` is the chance of reaching the end of the shift without ruin, from the exact present state. Computing it for someone who knows the hidden regime, someone who watches the pressures, and someone who knows nothing prices information about the regime in ruin units: the observer recovers about a third of what a clairvoyant knows. *Wrong if* the same quantity exists under another name (risk-to-go, runtime digital-twin forecasting) and has been measured this way.
+3. **Shape before mean.** Four disruption structures with the same average load give 0%, 0%, 11.8% and 15.5% ruin (`ruin structure`). A plan built on averages cannot see this. *Wrong if* real disruption turns out not to be bursty: then the structures converge and the headline result goes away. This is the most falsifiable claim and the one real data should test first.
+4. **The anatomy of a ruin.** In this model ruin is one system-wide gridlock, not many local jams adding up; the worst regimes are 9% of the time, 22% of the delay and 49% of the loss, because lateness compounds. *Wrong if* it is an artefact of the uniform shocks and monotone trips (it may be; the model says so).
+5. **Validation as part of the object.** Agreement with the exact Cramér-Lundberg formula, a negative control for the stylized facts, intervals on every figure, and a regression test for each flaw found. This is good practice rather than a domain contribution, but it is what makes the other claims checkable.
+6. **The Instinct.** Treating the ensemble of days a logistician has already lived as a dimension of `D`, and reading trouble as distance from the routine. This is the newest idea here and the least settled; the next section develops it.
+
+What would settle all of this, in order: (a) check on real disruption data whether the clustering that point 3 depends on is there; (b) run RUIN head to head with time-to-survive and with simple warning rules on a network with real topology; (c) show a decision that changes because of what RUIN says, which needs the policy layer.
+
+---
+
+## Destiny and the Instinct
+
+This section expands the concept. It separates what has been measured from what is a hypothesis.
+
+### The linear day
+
+A logistics operation is repeated. The same depots, the same cut-off times, the same routes, day after day, and the work of the people running it is to make that day better: tighter routes, thinner buffers, fewer surprises. The plan is linear in two senses. Inside a day it is an ordered sequence of steps. Across days it is a sequence converging on a fixed point, the optimised routine.
+
+The plan is the expected day. It cannot say anything about the days that are not expected, and logistics is the business of the days that are not.
+
+### Destiny as the remainder
+
+**Destiny is what the linear plan cannot see: the bounded set of ways today could still go.** It is mysterious in a precise sense. It is there at every step (`Δ(t)` is defined from any state), it shapes what happens, and it is never observed directly. What can be seen is its footprint in the pressures and, afterwards, one realised day out of the many that were possible. The hidden regime makes this literal: a shift can be in a bad regime for a while before anything on the board says so.
+
+This is why `D` is a frame and not a forecast. It does not say which day will happen. It says what kind of days can.
+
+### The fourth dimension
+
+`D` is drawn as a square, two dimensions of where. Add the step of the shift, and `D` is three-dimensional: a movie of one day. The fourth dimension is **which day**: the index `k` of the days that came before.
+
+A logistician standing at step `t` of today (day `k`) is looking at a *fibre*: the many earlier days at the same step. The first three dimensions give the day as it is. The fourth gives what a day at this point usually is, and how much days differ. Today is a point in `(x, y, t)` and a position within the fibre over it. That position is what can feel wrong.
+
+```text
+routine    R_c(t)  = typical value of channel c at step t, over the days lived
+spread     S_c(t)  = how much that value normally differs between days
+deviation  z_c(t)  = (x_c(t) - R_c(t)) / S_c(t)
+Inst(t)    = mean over the watched channels c of z_c(t)
+```
+
+`Inst` accumulates if wanted (an exponentially weighted average of `Inst(t)`), which is closer to a feeling that builds than to a sudden alarm.
+
+In the engine, this fourth dimension is not new machinery. Monte Carlo and `fork` already produce the fibre of days over a state; "4D" is the perspective that makes them the thing a person stands inside. In the current model days are independent draws, so `k` carries no memory yet.
+
+### Where `Inst` sits
+
+| | Needs | Answers |
+| --- | --- | --- |
+| `Δ(t)`, remaining destiny | the model and the exact state | how much destiny is left |
+| The observer | the model of the regimes, fitted on labelled history | which regime D is probably in |
+| `Inst` | only the days already lived | how unusual today is, here |
+
+`Inst` is what the observer would be if it had no model and only habit. It is weaker in principle and much cheaper, and it is how a person with experience of the operation can sense that something is off before they can say what. The observer is that instinct made exact.
+
+### A first exploratory test
+
+`experiments/instinct.py` simulates 1200 days of the reference scenario. The first 600 are the days lived and define the routine; the 600 after are new days (100 of them ruin). Every signal is allowed a false alarm on 10% of the shifts that do not ruin. The board is the surplus drawdown and the SLA miss rate, the things the ruin rule is built from.
+
+| Signal | AUC (ruin within 40 steps) | Ruined shifts flagged | Median warning (steps before ruin) | False alarms |
+| --- | --- | --- | --- | --- |
+| The board | 0.960 | 100 of 100 | 22 | 0.10 |
+| Late ratio, raw | 0.971 | 96 of 100 | 22 | 0.12 |
+| Chaos pressure, raw | 0.979 | 89 of 100 | 49 | 0.09 |
+| `Inst` on late ratio alone | 0.959 | 79 of 100 | 23 | 0.12 |
+| `Inst` on late, field, chaos | 0.990 | 95 of 100 | 49 | 0.09 |
+| The same, building up | 0.993 | 97 of 100 | 50 | 0.09 |
+| The same with no routine, one overall scale | 0.990 | 94 of 100 | 43 | 0.08 |
+| That, building up | 0.992 | 96 of 100 | 42 | 0.08 |
+
+What this shows, and what it does not:
+
+- **Watching what the board does not show gives about twice the warning.** At the same false-alarm rate a person who watches the pressure and the field flags a ruining shift about 50 steps ahead, against 22 for the board. This is partly by construction: the board is built from the breach condition, so it can only rise once lateness has piled up. It shows that waiting for the board is late, not that `Inst` forecasts well on a real operation.
+- **Most of that comes from watching several channels, not from the routine.** Raw chaos pressure alone already warns 49 steps ahead. The learned routine adds a small amount on top (warning 49 to 50 steps against 42 to 43 without it, and 95 to 97 shifts flagged against 94 to 96). The direction is favourable; the difference was not tested for significance and rests on 100 ruined shifts, so it should be treated as within noise.
+- **The routine has little to say here because this model has no daily rhythm.** After the first steps, the typical late ratio, field and chaos pressure are nearly flat over a shift (chaos pressure goes from 0.22 at step 30 to 0.24 at step 400). "What is normal for this time of day" is almost the same at every time of day. Real operations have a strong rhythm, with the morning wave, the cut-off and the evening return, and that is where the routine should earn its place. That is a hypothesis; it is not tested.
+
+### The optimisation paradox
+
+This one is a prediction from theory, not a measurement. Optimising a repeated operation does two things at once.
+
+It makes days more alike, so the routine tightens (`S` falls) and `Inst` gets more sensitive to a departure. But it also pushes utilisation toward its limit and thins the buffer. In the classical model the ruin probability is `ψ(u) = ρ · exp(−(1−ρ) u / μ)`, where `ρ = λμ / c` is the load and `u` the buffer. Optimisation drives `ρ` toward 1, where the exponent goes to zero and `ψ` goes to 1, and it shrinks `u`. The optimised day looks calmer and sits closer to the edge.
+
+So the instinct is trained on the calmest days there are, and it senses *departure from the routine*. It cannot sense *how thin the margin under the routine has become*. That is the job of `ψ(u)` and its sensitivity (`ruin sensitivity`). The two are complementary: instinct reads the day, ruin probability reads the margin. Whether this is what happens in real operations is untested.
+
+### What is and is not claimed
+
+- `Inst` is a computable stand-in. It is not a model of human cognition, and no claim is made that logisticians have such an instinct or that it can be measured. The name is a handle for the idea.
+- The numbers above come from one illustrative scenario with no real data and no daily rhythm.
+- The fourth dimension is a way of seeing the Monte Carlo ensemble, not a new object in the engine.
+
+### Next steps this opens
+
+- **Rhythm**: give demand and disruption a time-of-shift profile, then repeat the test, and test the routine's contribution for significance.
+- **Memory across days**: let backlog, fatigue and learning carry over, so that `k` has structure and the fibre is not just independent draws.
+- **A surprise map**: `Inst` per cell of the Probability Square, drawing where on the grid the day feels wrong.
+- **Instinct and observer together**: whether `Inst` adds anything to the calibrated posterior, or only matches it.
+- **Real logs**: the only place the claim "people sense trouble from deviation from the routine" can be checked.
 
 ---
 
